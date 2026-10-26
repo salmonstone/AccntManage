@@ -38,24 +38,47 @@ export function Notification({ notification }) {
 }
 
 export function StatusBadge({ status }) {
-  const map = {
+  const colorMap = {
     draft: 'muted', pending: 'warning', queued: 'warning',
     running: 'info', completed: 'success', verified: 'success',
     authorized: 'success', passed: 'success',
     failed: 'danger', error: 'danger', cancelled: 'danger',
     timeout: 'danger', timed_out: 'danger',
     unverified: 'warning', suspended: 'danger',
-    mocked: 'mock', mock_only: 'mock',
+    mocked: 'mock', mock_only: 'mock', simulated: 'mock',
+    local_record_only: 'muted',
     manual_required: 'warning', unsupported: 'muted',
+    registration_confirmed: 'success',
+    email_unverified: 'warning',
+    verified_live: 'success',
     untested: 'muted', testing: 'info',
     pending_email_verification: 'warning',
     pending_phone_verification: 'warning',
     token_expired: 'warning', revoked: 'muted',
     unconfigured: 'muted', configured: 'info',
+    configured_not_tested: 'warning', live_tested: 'success',
+    disabled: 'muted', unavailable: 'danger',
     connected: 'success', interrupted: 'warning',
+    created: 'muted', paused_manual: 'warning',
   };
-  const cls = map[status] || 'muted';
-  return <span className={`badge badge-${cls}`}>{status}</span>;
+  const labelMap = {
+    local_record_only: 'Local Record Only',
+    manual_required: 'Manual Required',
+    mock_only: 'Mock Only',
+    verified_live: 'Verified (Live)',
+    email_unverified: 'Email Unverified',
+    registration_confirmed: 'Registration Confirmed',
+    pending_email_verification: 'Pending Email',
+    pending_phone_verification: 'Pending Phone',
+    token_expired: 'Token Expired',
+    timed_out: 'Timed Out',
+    configured_not_tested: 'Configured (Untested)',
+    live_tested: 'Live Tested',
+    paused_manual: 'Paused (Manual)',
+  };
+  const cls = colorMap[status] || 'muted';
+  const label = labelMap[status] || status;
+  return <span className={`badge badge-${cls}`}>{label}</span>;
 }
 
 export function EmptyState({ icon = '📋', text = 'No data yet' }) {

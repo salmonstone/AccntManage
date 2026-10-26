@@ -11,7 +11,6 @@ from fastapi.staticfiles import StaticFiles
 
 from backend.app.api.v1.router import api_router
 from backend.app.api.v1.websocket import router as ws_router
-from backend.app.core.config import settings
 from backend.app.core.logging import setup_logging
 from backend.app.core.security import generate_correlation_id
 from backend.app.db.base import Base, engine

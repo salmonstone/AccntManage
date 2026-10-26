@@ -94,8 +94,8 @@ async def test_workflow_engine_step_execution():
         WorkflowDefinition,
         WorkflowEngine,
         WorkflowExecution,
-        WorkflowStep,
         WorkflowStatus,
+        WorkflowStep,
     )
 
     class PassStep(WorkflowStep):
@@ -129,8 +129,8 @@ async def test_workflow_engine_skip_optional():
         WorkflowDefinition,
         WorkflowEngine,
         WorkflowExecution,
-        WorkflowStep,
         WorkflowStatus,
+        WorkflowStep,
     )
 
     class FailOptional(WorkflowStep):

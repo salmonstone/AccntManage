@@ -46,13 +46,24 @@ export default function Accounts() {
           <option value="battlenet">Battle.net</option>
           <option value="twitch">Twitch</option>
         </select>
-        <select value={status} onChange={e => { setStatus(e.target.value); setPage(1); }} style={{ width: 160 }}>
+        <select value={status} onChange={e => { setStatus(e.target.value); setPage(1); }} style={{ width: 200 }}>
           <option value="">All Statuses</option>
           <option value="draft">Draft</option>
+          <option value="local_record_only">Local Record Only</option>
+          <option value="simulated">Simulated</option>
+          <option value="mocked">Mocked</option>
+          <option value="manual_required">Manual Required</option>
+          <option value="unsupported">Unsupported</option>
+          <option value="registration_confirmed">Registration Confirmed</option>
+          <option value="pending_email_verification">Pending Email</option>
+          <option value="email_unverified">Email Unverified</option>
+          <option value="pending_phone_verification">Pending Phone</option>
+          <option value="verified_live">Verified (Live)</option>
           <option value="verified">Verified</option>
           <option value="unverified">Unverified</option>
-          <option value="mocked">Mocked</option>
           <option value="failed">Failed</option>
+          <option value="cancelled">Cancelled</option>
+          <option value="suspended">Suspended</option>
         </select>
         <input
           placeholder="Search email or name..."
@@ -131,6 +142,9 @@ function CreateAccountDialog({ onClose, onSuccess }) {
     <div className="confirm-dialog-overlay" onClick={onClose}>
       <div className="confirm-dialog" onClick={e => e.stopPropagation()} style={{ maxWidth: 480 }}>
         <h3 style={{ color: 'var(--text-primary)' }}>Add Account</h3>
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
+          This creates a local database record only. It does not register an account on the platform.
+        </p>
         {error && <ErrorMessage message={error} />}
         <div className="form-group">
           <label className="form-label">Platform</label>

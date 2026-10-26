@@ -3,13 +3,13 @@ from __future__ import annotations
 import logging
 import re
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import httpx
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.app.core.security import encrypt_value, mask_secret
+from backend.app.core.security import encrypt_value
 from backend.app.models.enums import ProxyProtocol, ProxyTestStatus
 from backend.app.models.proxy import Proxy
 from backend.app.schemas.common import PaginatedResponse
@@ -106,7 +106,7 @@ class ProxyService:
             proxy.test_status = ProxyTestStatus.PASSED
             proxy.last_latency_ms = latency
             proxy.last_error = None
-            proxy.last_test_at = datetime.now(timezone.utc)
+            proxy.last_test_at = datetime.now(UTC)
             await self._session.commit()
 
             return ProxyTestResult(
@@ -120,14 +120,14 @@ class ProxyService:
         except httpx.TimeoutException:
             proxy.test_status = ProxyTestStatus.TIMEOUT
             proxy.last_error = "Connection timed out"
-            proxy.last_test_at = datetime.now(timezone.utc)
+            proxy.last_test_at = datetime.now(UTC)
             await self._session.commit()
             return ProxyTestResult(proxy_id=proxy_id, status=ProxyTestStatus.TIMEOUT, error="Timeout")
         except Exception as e:
             error_msg = str(e)[:500]
             proxy.test_status = ProxyTestStatus.FAILED
             proxy.last_error = error_msg
-            proxy.last_test_at = datetime.now(timezone.utc)
+            proxy.last_test_at = datetime.now(UTC)
             await self._session.commit()
             return ProxyTestResult(proxy_id=proxy_id, status=ProxyTestStatus.FAILED, error=error_msg)
 

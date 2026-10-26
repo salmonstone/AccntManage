@@ -2,17 +2,22 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
+import httpx
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.adapters.base import MailboxAdapter
-from backend.app.core.security import decrypt_value, encrypt_value, mask_secret
+from backend.app.core.config import settings
+from backend.app.core.security import decrypt_value, encrypt_value
 from backend.app.models.enums import MailboxStatus
 from backend.app.models.mailbox import Mailbox
 from backend.app.schemas.common import PaginatedResponse
 from backend.app.schemas.mailbox import MailboxImportPreview, MailboxResponse
+
+AUTHORITY = "https://login.microsoftonline.com"
+GRAPH_SCOPES = "Mail.Read offline_access"
 
 logger = logging.getLogger(__name__)
 
@@ -149,6 +154,88 @@ class MailboxService:
 
         token = decrypt_value(mailbox.encrypted_token)
         return await self._adapter.search_messages(token, sender_filter, subject_filter, max_results)
+
+    async def refresh_token(self, mailbox_id: int) -> dict:
+        mailbox = await self.get(mailbox_id)
+        if not mailbox:
+            raise ValueError("Mailbox not found")
+        if not mailbox.encrypted_password:
+            raise ValueError("No refresh token stored — re-authorize via OAuth")
+        if not settings.MSGRAPH_CLIENT_ID or not settings.MSGRAPH_TENANT_ID:
+            raise ValueError("Microsoft Graph not configured")
+
+        refresh_tok = decrypt_value(mailbox.encrypted_password)
+        client_id = mailbox.client_id or settings.MSGRAPH_CLIENT_ID
+        token_url = f"{AUTHORITY}/{settings.MSGRAPH_TENANT_ID}/oauth2/v2.0/token"
+
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(token_url, data={
+                "client_id": client_id,
+                "scope": GRAPH_SCOPES,
+                "refresh_token": refresh_tok,
+                "grant_type": "refresh_token",
+            })
+
+        if resp.status_code != 200:
+            mailbox.status = MailboxStatus.TOKEN_EXPIRED
+            await self._session.commit()
+            raise ValueError("Token refresh failed — re-authorize via OAuth")
+
+        token_resp = resp.json()
+        access_token = token_resp.get("access_token", "")
+        new_refresh = token_resp.get("refresh_token", "")
+        expires_in = int(token_resp.get("expires_in", 3600))
+
+        mailbox.encrypted_token = encrypt_value(access_token)
+        mailbox.token_expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+        mailbox.status = MailboxStatus.AUTHORIZED
+        if new_refresh:
+            mailbox.encrypted_password = encrypt_value(new_refresh)
+        await self._session.commit()
+
+        return {
+            "status": "refreshed",
+            "mailbox_id": mailbox_id,
+            "email": mailbox.email,
+            "expires_in": expires_in,
+        }
+
+    async def diagnostics(self, mailbox_id: int) -> dict:
+        mailbox = await self.get(mailbox_id)
+        if not mailbox:
+            raise ValueError("Mailbox not found")
+
+        token_status = "missing"
+        if mailbox.status == MailboxStatus.REVOKED:
+            token_status = "revoked"
+        elif mailbox.encrypted_token:
+            if mailbox.token_expires_at and mailbox.token_expires_at < datetime.now(timezone.utc):
+                token_status = "expired"
+            elif mailbox.status == MailboxStatus.AUTHORIZED:
+                token_status = "valid"
+            else:
+                token_status = "unknown"
+
+        has_refresh_token = bool(mailbox.encrypted_password)
+
+        if not settings.MSGRAPH_CLIENT_ID:
+            provider_status = "unconfigured"
+        elif mailbox.status == MailboxStatus.AUTHORIZED:
+            provider_status = "authorized"
+        else:
+            provider_status = "mocked" if self._adapter.is_mock() else "configured"
+
+        return {
+            "mailbox_id": mailbox_id,
+            "email": mailbox.email,
+            "token_status": token_status,
+            "scopes": mailbox.scopes,
+            "has_refresh_token": has_refresh_token,
+            "last_authorized_at": mailbox.updated_at.isoformat() if mailbox.status == MailboxStatus.AUTHORIZED else None,
+            "token_expires_at": mailbox.token_expires_at.isoformat() if mailbox.token_expires_at else None,
+            "provider_status": provider_status,
+            "is_mock": self._adapter.is_mock(),
+        }
 
     async def revoke(self, mailbox_id: int) -> None:
         mailbox = await self.get(mailbox_id)

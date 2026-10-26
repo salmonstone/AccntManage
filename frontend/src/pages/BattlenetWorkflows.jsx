@@ -194,7 +194,10 @@ export default function BattlenetWorkflows() {
                 <tr key={wf.id}>
                   <td>{wf.id}</td>
                   <td>#{wf.account_id}</td>
-                  <td><StatusBadge status={wf.status} /></td>
+                  <td>
+                    <StatusBadge status={wf.status} />
+                    {wf.is_mock && <span className="badge badge-mock" style={{ marginLeft: 4, fontSize: 10 }}>SIMULATED</span>}
+                  </td>
                   <td>{wf.current_step_index + 1} / {wf.total_steps}</td>
                   <td>{new Date(wf.created_at).toLocaleString()}</td>
                   <td>

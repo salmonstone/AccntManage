@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,10 +9,14 @@ from backend.app.models.account import Account
 from backend.app.models.audit import AuditLog
 from backend.app.models.enums import (
     AccountPlatform,
+    AccountStatus,
     JobStatus,
     MailboxStatus,
     ProxyTestStatus,
 )
+
+MOCK_STATUSES = {AccountStatus.SIMULATED, AccountStatus.MOCKED, AccountStatus.LOCAL_RECORD_ONLY}
+LIVE_STATUSES = {AccountStatus.VERIFIED_LIVE, AccountStatus.REGISTRATION_CONFIRMED, AccountStatus.VERIFIED}
 from backend.app.models.job import Job
 from backend.app.models.mailbox import Mailbox
 from backend.app.models.proxy import Proxy
@@ -24,7 +28,7 @@ class DashboardService:
         self._session = session
 
     async def get_metrics(self) -> DashboardMetrics:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         day_ago = now - timedelta(hours=24)
 
         bnet = (await self._session.execute(
@@ -71,6 +75,14 @@ class DashboardService:
             select(func.count(Mailbox.id)).where(Mailbox.status == MailboxStatus.AUTHORIZED)
         )).scalar() or 0
 
+        mock_accounts = (await self._session.execute(
+            select(func.count(Account.id)).where(Account.status.in_(MOCK_STATUSES))
+        )).scalar() or 0
+
+        live_accounts = (await self._session.execute(
+            select(func.count(Account.id)).where(Account.status.in_(LIVE_STATUSES))
+        )).scalar() or 0
+
         return DashboardMetrics(
             total_battlenet_accounts=bnet,
             total_twitch_accounts=twitch,
@@ -83,6 +95,8 @@ class DashboardService:
             proxies_passed=proxies_passed,
             proxies_failed=proxies_failed,
             mailboxes_authorized=mailboxes_auth,
+            live_accounts=live_accounts,
+            mock_accounts=mock_accounts,
         )
 
     async def get_recent_activity(self, limit: int = 20) -> list[RecentActivity]:

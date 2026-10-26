@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import enum
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -43,7 +43,7 @@ class StepResult:
         self.message = message
         self.data = data or {}
         self.screenshot_path = screenshot_path
-        self.timestamp = datetime.now(timezone.utc).isoformat()
+        self.timestamp = datetime.now(UTC).isoformat()
 
 
 class WorkflowStep:
@@ -79,7 +79,7 @@ class WorkflowExecution:
         self.current_step_index = 0
         self.step_results: list[dict[str, Any]] = []
         self.context: dict[str, Any] = {"account_id": account_id}
-        self.created_at = datetime.now(timezone.utc).isoformat()
+        self.created_at = datetime.now(UTC).isoformat()
         self.updated_at = self.created_at
 
     def to_dict(self) -> dict[str, Any]:
@@ -101,7 +101,7 @@ class WorkflowEngine:
 
     async def run(self, execution: WorkflowExecution) -> WorkflowExecution:
         execution.status = WorkflowStatus.RUNNING
-        execution.updated_at = datetime.now(timezone.utc).isoformat()
+        execution.updated_at = datetime.now(UTC).isoformat()
 
         for i in range(execution.current_step_index, len(execution.definition.steps)):
             step = execution.definition.steps[i]
@@ -131,7 +131,7 @@ class WorkflowEngine:
                 "screenshot": result.screenshot_path,
                 "timestamp": result.timestamp,
             })
-            execution.updated_at = datetime.now(timezone.utc).isoformat()
+            execution.updated_at = datetime.now(UTC).isoformat()
 
             if result.status == StepStatus.MANUAL_REQUIRED:
                 execution.status = WorkflowStatus.PAUSED_MANUAL
@@ -152,5 +152,5 @@ class WorkflowEngine:
                 continue
 
         execution.status = WorkflowStatus.COMPLETED
-        execution.updated_at = datetime.now(timezone.utc).isoformat()
+        execution.updated_at = datetime.now(UTC).isoformat()
         return execution

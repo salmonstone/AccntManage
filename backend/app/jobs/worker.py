@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone
 
 from sqlalchemy import select
 
@@ -83,7 +82,7 @@ class WorkerSupervisor:
                     self._execute_job(job_id, job_type, svc),
                     timeout=settings.JOB_TIMEOUT_SECONDS,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 await svc.mark_failed(job_id, "Job timed out")
             except asyncio.CancelledError:
                 await svc.mark_failed(job_id, "Job cancelled during shutdown")
@@ -138,10 +137,11 @@ class WorkerSupervisor:
             await svc.mark_failed(job_id, "Missing workflow_execution_id in params")
             return
 
-        from backend.app.services.workflow_service import WorkflowService
-        from backend.app.workflows.engine import WorkflowEngine, WorkflowExecution as EngineExecution
         from backend.app.models.workflow import WorkflowExecution as WorkflowModel
+        from backend.app.services.workflow_service import WorkflowService
         from backend.app.workflows.battlenet import create_battlenet_workflow
+        from backend.app.workflows.engine import WorkflowEngine
+        from backend.app.workflows.engine import WorkflowExecution as EngineExecution
         from backend.app.workflows.twitch import create_twitch_workflow
 
         async with async_session_factory() as session:

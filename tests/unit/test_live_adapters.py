@@ -106,8 +106,8 @@ def test_twitch_workflow_factory():
 
 @pytest.mark.asyncio
 async def test_twitch_no_verification_step():
-    from backend.app.workflows.twitch import TwitchNoVerificationStep
     from backend.app.workflows.engine import StepStatus
+    from backend.app.workflows.twitch import TwitchNoVerificationStep
 
     step = TwitchNoVerificationStep()
     result = await step.execute({})

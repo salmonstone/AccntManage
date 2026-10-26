@@ -21,7 +21,6 @@ async def get_recent_activity(
     limit: int = 20,
     session: AsyncSession = Depends(get_session),
 ):
-    if limit > 100:
-        limit = 100
+    limit = min(limit, 100)
     svc = DashboardService(session)
     return await svc.get_recent_activity(limit)

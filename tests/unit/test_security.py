@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import pytest
-
 from backend.app.core.security import (
     constant_time_compare,
     decrypt_value,

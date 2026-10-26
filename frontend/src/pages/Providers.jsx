@@ -36,7 +36,8 @@ function ProviderCard({ type, title, description, notify }) {
       {data && (
         <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>
           {data.message}
-          {data.is_mock && <span className="badge badge-mock" style={{ marginLeft: 8 }}>MOCK</span>}
+          {data.is_mock && <span className="badge badge-mock" style={{ marginLeft: 8 }}>MOCK — No live integration active</span>}
+          {data.status === 'disabled' && <span className="badge badge-muted" style={{ marginLeft: 8 }}>DISABLED BY POLICY</span>}
         </div>
       )}
       <button className="btn" onClick={async () => {

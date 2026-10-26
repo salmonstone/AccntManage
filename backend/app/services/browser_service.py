@@ -6,8 +6,7 @@ Used by workflow steps that require browser interaction.
 from __future__ import annotations
 
 import logging
-import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -37,8 +36,8 @@ class BrowserConfig:
 class BrowserService:
     def __init__(self, config: BrowserConfig | None = None) -> None:
         self._config = config or BrowserConfig()
-        self._playwright = None
-        self._browser = None
+        self._playwright: Any = None
+        self._browser: Any = None
         SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
 
     async def start(self) -> None:
@@ -73,7 +72,7 @@ class BrowserService:
         return page
 
     async def take_screenshot(self, page: Any, label: str = "screenshot") -> str:
-        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
+        ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S_%f")
         safe_label = "".join(c if c.isalnum() or c in "-_" else "_" for c in label)
         filename = f"{safe_label}_{ts}.png"
         path = SCREENSHOTS_DIR / filename

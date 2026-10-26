@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import logging
-import os
 import shutil
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from backend.app.core.config import settings
@@ -22,7 +21,7 @@ class BackupService:
         if not Path(db_path).exists():
             raise ValueError("Database file not found")
 
-        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
         backup_name = f"backup_{ts}.db"
         backup_path = BACKUP_DIR / backup_name
         shutil.copy2(db_path, str(backup_path))
@@ -36,7 +35,7 @@ class BackupService:
             backups.append({
                 "name": f.name,
                 "size_bytes": stat.st_size,
-                "created_at": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
+                "created_at": datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat(),
             })
         return backups
 
@@ -61,7 +60,7 @@ class BackupService:
         logger.info("Backup restored: %s", name)
 
     def cleanup_old_backups(self) -> int:
-        cutoff = datetime.now(timezone.utc).timestamp() - (settings.BACKUP_RETENTION_DAYS * 86400)
+        cutoff = datetime.now(UTC).timestamp() - (settings.BACKUP_RETENTION_DAYS * 86400)
         removed = 0
         for f in BACKUP_DIR.glob("backup_*.db"):
             if f.stat().st_mtime < cutoff:

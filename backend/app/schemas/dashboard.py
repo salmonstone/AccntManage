@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from backend.app.models.enums import AccountStatus, JobStatus
-
 
 class DashboardMetrics(BaseModel):
     total_battlenet_accounts: int = 0
@@ -17,6 +15,8 @@ class DashboardMetrics(BaseModel):
     proxies_passed: int = 0
     proxies_failed: int = 0
     mailboxes_authorized: int = 0
+    live_accounts: int = 0
+    mock_accounts: int = 0
 
 
 class RecentActivity(BaseModel):

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -103,7 +103,7 @@ class JobService:
         if job.status in TERMINAL_STATUSES:
             raise ValueError(f"Cannot cancel job in {job.status.value} state")
         job.status = JobStatus.CANCELLED
-        job.completed_at = datetime.now(timezone.utc)
+        job.completed_at = datetime.now(UTC)
         await self._session.commit()
         return job
 
@@ -129,7 +129,7 @@ class JobService:
         if not job or job.status != JobStatus.QUEUED:
             return
         job.status = JobStatus.RUNNING
-        job.started_at = datetime.now(timezone.utc)
+        job.started_at = datetime.now(UTC)
         await self._session.commit()
 
     async def mark_completed(self, job_id: int, result_data: dict | None = None) -> None:
@@ -138,7 +138,7 @@ class JobService:
             return
         job.status = JobStatus.COMPLETED
         job.progress = 100.0
-        job.completed_at = datetime.now(timezone.utc)
+        job.completed_at = datetime.now(UTC)
         if result_data:
             job.result_json = json.dumps(result_data)
         await self._session.commit()
@@ -149,7 +149,7 @@ class JobService:
             return
         job.status = JobStatus.FAILED
         job.error_message = error[:2000]
-        job.completed_at = datetime.now(timezone.utc)
+        job.completed_at = datetime.now(UTC)
         await self._session.commit()
 
     async def recover_interrupted(self) -> int:

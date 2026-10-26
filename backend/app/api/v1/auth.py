@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from urllib.parse import urlencode
 
 import httpx
@@ -121,7 +121,7 @@ async def msgraph_callback(
 
     mailbox.encrypted_token = encrypt_value(access_token)
     mailbox.token_type = "bearer"
-    mailbox.token_expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+    mailbox.token_expires_at = datetime.now(UTC) + timedelta(seconds=expires_in)
     mailbox.scopes = GRAPH_SCOPES
     mailbox.status = MailboxStatus.AUTHORIZED
 

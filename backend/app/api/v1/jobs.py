@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.db.base import get_session
 from backend.app.models.enums import AuditAction, JobStatus, JobType
-from backend.app.schemas.common import PaginatedResponse, SuccessResponse
+from backend.app.schemas.common import PaginatedResponse
 from backend.app.schemas.job import JobCreateRequest, JobResponse
 from backend.app.services.audit_service import AuditService
 from backend.app.services.job_service import JobService
