@@ -19,6 +19,14 @@ logger = logging.getLogger(__name__)
 TERMINAL_STATUSES = {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED, JobStatus.TIMED_OUT}
 
 
+async def _broadcast_job_event(event_type: str, job_id: int, status: str) -> None:
+    try:
+        from backend.app.api.v1.websocket import broadcast
+        await broadcast({"type": event_type, "job_id": job_id, "status": status})
+    except Exception:
+        pass
+
+
 class JobService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -131,6 +139,7 @@ class JobService:
         job.status = JobStatus.RUNNING
         job.started_at = datetime.now(UTC)
         await self._session.commit()
+        await _broadcast_job_event("job_update", job_id, "running")
 
     async def mark_completed(self, job_id: int, result_data: dict | None = None) -> None:
         job = await self.get(job_id)
@@ -142,6 +151,7 @@ class JobService:
         if result_data:
             job.result_json = json.dumps(result_data)
         await self._session.commit()
+        await _broadcast_job_event("job_completed", job_id, "completed")
 
     async def mark_failed(self, job_id: int, error: str) -> None:
         job = await self.get(job_id)
@@ -151,6 +161,7 @@ class JobService:
         job.error_message = error[:2000]
         job.completed_at = datetime.now(UTC)
         await self._session.commit()
+        await _broadcast_job_event("job_failed", job_id, "failed")
 
     async def recover_interrupted(self) -> int:
         result = await self._session.execute(

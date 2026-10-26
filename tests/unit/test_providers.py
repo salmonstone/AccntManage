@@ -59,6 +59,23 @@ async def test_provider_status_all_values(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_captcha_profiles(client: AsyncClient):
+    resp = await client.get("/api/v1/providers/captcha/profiles")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 4
+    names = {p["provider"] for p in data}
+    assert names == {"capsolver", "anticaptcha", "twocaptcha", "ezcaptcha"}
+    for p in data:
+        assert "status" in p
+        assert "is_active" in p
+        assert "has_key" in p
+        assert "is_mock" in p
+        assert p["status"] == "disabled"
+        assert p["is_mock"] is True
+
+
+@pytest.mark.asyncio
 async def test_health_includes_provider_statuses(client: AsyncClient):
     resp = await client.get("/api/v1/health")
     assert resp.status_code == 200

@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { api } from '../api';
-import { useApi, useNotification } from '../hooks';
+import { useApi, useNotification, useWebSocket } from '../hooks';
 import { Loading, ErrorMessage, StatusBadge, EmptyState, Pagination, Notification } from '../components';
 
 export default function Jobs() {
@@ -8,12 +8,23 @@ export default function Jobs() {
   const { notification, notify } = useNotification();
   const { data, loading, error, reload } = useApi(() => api.jobs.list({ page }), [page]);
 
+  const onWsMessage = useCallback((msg) => {
+    if (msg.type === 'job_update' || msg.type === 'job_completed' || msg.type === 'job_failed') {
+      reload();
+    }
+  }, [reload]);
+
+  const { connected } = useWebSocket(onWsMessage);
+
   return (
     <div>
       <Notification notification={notification} />
       <h1 className="page-title">Job Queue</h1>
       <div className="toolbar">
         <button className="btn" onClick={reload}>Refresh</button>
+        <span style={{ fontSize: 11, color: connected ? 'var(--success)' : 'var(--text-muted)', marginLeft: 8 }}>
+          {connected ? 'Live' : 'Offline'}
+        </span>
       </div>
 
       {loading ? <Loading /> : error ? <ErrorMessage message={error} /> : (

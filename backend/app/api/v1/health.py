@@ -23,7 +23,14 @@ def _resolve_provider_status(provider: str) -> ProviderStatus:
     if provider == "captcha":
         if not settings.CAPTCHA_SOLVE_ENABLED:
             return ProviderStatus.DISABLED
-        if not settings.CAPSOLVER_API_KEY:
+        key_map = {
+            "capsolver": settings.CAPSOLVER_API_KEY,
+            "anticaptcha": settings.ANTICAPTCHA_API_KEY,
+            "twocaptcha": settings.TWOCAPTCHA_API_KEY,
+            "ezcaptcha": settings.EZCAPTCHA_API_KEY,
+        }
+        active_key = key_map.get(settings.CAPTCHA_PROVIDER, "")
+        if not active_key:
             return ProviderStatus.UNCONFIGURED
         return ProviderStatus.CONFIGURED_NOT_TESTED
     if provider == "msgraph":

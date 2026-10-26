@@ -11,7 +11,7 @@ from backend.app.adapters.mock_sms import MockSMSAdapter
 from backend.app.api.v1.health import _resolve_provider_status
 from backend.app.core.security import encrypt_value
 from backend.app.db.base import get_session
-from backend.app.models.enums import AuditAction, ProviderStatus, ProviderType
+from backend.app.models.enums import AuditAction, CaptchaProvider, ProviderStatus, ProviderType
 from backend.app.models.provider import ProviderConfig
 from backend.app.schemas.provider import (
     ProviderConfigResponse,
@@ -117,3 +117,35 @@ async def check_health(provider_type: ProviderType, session: AsyncSession = Depe
             is_mock=False,
         )
     raise HTTPException(status_code=400, detail="Unknown provider type")
+
+
+@router.get("/captcha/profiles")
+async def get_captcha_profiles():
+    from backend.app.core.config import settings as cfg
+
+    profiles = []
+    for cp in CaptchaProvider:
+        key_map = {
+            CaptchaProvider.CAPSOLVER: cfg.CAPSOLVER_API_KEY,
+            CaptchaProvider.ANTICAPTCHA: cfg.ANTICAPTCHA_API_KEY,
+            CaptchaProvider.TWOCAPTCHA: cfg.TWOCAPTCHA_API_KEY,
+            CaptchaProvider.EZCAPTCHA: cfg.EZCAPTCHA_API_KEY,
+        }
+        has_key = bool(key_map.get(cp, ""))
+        is_active = cfg.CAPTCHA_PROVIDER == cp.value
+        if not cfg.CAPTCHA_SOLVE_ENABLED:
+            status = ProviderStatus.DISABLED
+        elif has_key and is_active:
+            status = ProviderStatus.CONFIGURED_NOT_TESTED
+        elif has_key:
+            status = ProviderStatus.CONFIGURED
+        else:
+            status = ProviderStatus.UNCONFIGURED
+        profiles.append({
+            "provider": cp.value,
+            "status": status.value,
+            "is_active": is_active,
+            "has_key": has_key,
+            "is_mock": not has_key or not cfg.CAPTCHA_SOLVE_ENABLED,
+        })
+    return profiles
