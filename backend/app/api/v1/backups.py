@@ -45,6 +45,24 @@ async def delete_backup(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.post("/{backup_name}/restore", response_model=SuccessResponse)
+async def restore_backup(
+    backup_name: str,
+    confirm: bool = Query(False),
+    session: AsyncSession = Depends(get_session),
+):
+    if not confirm:
+        raise HTTPException(status_code=400, detail="Destructive action requires confirm=true")
+    svc = BackupService()
+    audit = AuditService(session)
+    try:
+        svc.restore_backup(backup_name)
+        await audit.log(AuditAction.BACKUP_RESTORED, "backup", details=backup_name)
+        return SuccessResponse(message=f"Backup restored: {backup_name}. Restart the server to apply.")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.post("/cleanup", response_model=SuccessResponse)
 async def cleanup_backups():
     svc = BackupService()

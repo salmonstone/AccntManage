@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import random
 import string
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from backend.app.adapters.base import SMSAdapter
@@ -23,7 +23,7 @@ class MockSMSAdapter(SMSAdapter):
             "rental_id": rental_id,
             "number": number,
             "country": country,
-            "rented_at": datetime.now(timezone.utc).isoformat(),
+            "rented_at": datetime.now(UTC).isoformat(),
             "expired": False,
         }
         return {

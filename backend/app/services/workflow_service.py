@@ -14,7 +14,10 @@ from backend.app.models.workflow import WorkflowExecution as WorkflowExecutionMo
 from backend.app.schemas.workflow import WorkflowResponse, WorkflowStepResultResponse
 from backend.app.services.job_service import JobService
 from backend.app.workflows.battlenet import create_battlenet_workflow
-from backend.app.workflows.engine import WorkflowEngine, WorkflowExecution, WorkflowStatus
+from backend.app.workflows.engine import (
+    WorkflowExecution,
+    WorkflowStatus,
+)
 from backend.app.workflows.twitch import create_twitch_workflow
 
 logger = logging.getLogger(__name__)

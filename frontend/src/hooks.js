@@ -36,9 +36,11 @@ export function useNotification() {
   return { notification, notify };
 }
 
-export function useWebSocket() {
+export function useWebSocket(onMessage) {
   const [connected, setConnected] = useState(false);
   const wsRef = useRef(null);
+  const cbRef = useRef(onMessage);
+  cbRef.current = onMessage;
 
   useEffect(() => {
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -46,6 +48,12 @@ export function useWebSocket() {
     wsRef.current = ws;
 
     ws.onopen = () => setConnected(true);
+    ws.onmessage = (evt) => {
+      try {
+        const data = JSON.parse(evt.data);
+        if (cbRef.current) cbRef.current(data);
+      } catch {}
+    };
     ws.onclose = () => {
       setConnected(false);
       setTimeout(() => {

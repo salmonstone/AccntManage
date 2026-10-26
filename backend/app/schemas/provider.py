@@ -30,3 +30,10 @@ class ProviderHealthResult(BaseModel):
     status: ProviderStatus
     message: str
     is_mock: bool = False
+
+
+class ProviderStatusSummary(BaseModel):
+    provider: str
+    status: ProviderStatus
+    is_mock: bool
+    capabilities: list[str] = []

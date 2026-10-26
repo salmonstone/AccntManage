@@ -29,10 +29,17 @@ class Settings(BaseSettings):
     MSGRAPH_TENANT_ID: str = ""
     MSGRAPH_REDIRECT_URI: str = "http://localhost:8765/api/v1/auth/msgraph/callback"
 
+    CAPTCHA_PROVIDER: str = "capsolver"
     CAPSOLVER_API_KEY: str = ""
+    ANTICAPTCHA_API_KEY: str = ""
+    TWOCAPTCHA_API_KEY: str = ""
+    EZCAPTCHA_API_KEY: str = ""
+
     SMS_PROVIDER_API_KEY: str = ""
     SMS_PROVIDER_BASE_URL: str = ""
     SMS_PROVIDER_NAME: str = "generic"
+
+    CAPTCHA_SOLVE_ENABLED: bool = False
 
     BROWSER_HEADLESS: bool = True
     BROWSER_TIMEOUT_MS: int = 30000

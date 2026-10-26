@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Routes, Route, NavLink, Navigate } from 'react-router-dom';
 import Dashboard from './pages/Dashboard';
 import Accounts from './pages/Accounts';
@@ -28,6 +28,18 @@ const NAV = [
 
 export default function App() {
   const [collapsed, setCollapsed] = useState(false);
+  const [mockMode, setMockMode] = useState(null);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('theme');
+      if (saved) document.documentElement.setAttribute('data-theme', saved);
+    } catch {}
+    fetch('/api/v1/health')
+      .then(r => r.json())
+      .then(d => setMockMode(d.mock_mode))
+      .catch(() => setMockMode(true));
+  }, []);
 
   return (
     <div className="app-layout">
@@ -50,7 +62,11 @@ export default function App() {
           ))}
         </nav>
         <div className="sidebar-footer">
-          {!collapsed && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Mock Mode Active</span>}
+          {!collapsed && mockMode !== null && (
+            <span style={{ fontSize: 11, color: mockMode ? 'var(--text-muted)' : 'var(--success)' }}>
+              {mockMode ? 'Mock Mode Active' : 'Live Providers'}
+            </span>
+          )}
         </div>
       </aside>
       <main className="main-content">

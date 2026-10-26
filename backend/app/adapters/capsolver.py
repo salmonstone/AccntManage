@@ -13,10 +13,16 @@ from typing import Any
 import httpx
 
 from backend.app.adapters.base import CaptchaAdapter
+from backend.app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
 CAPSOLVER_API_URL = "https://api.capsolver.com"
+
+CAPTCHA_POLICY_MESSAGE = (
+    "Live CAPTCHA solving is disabled by policy. "
+    "Set CAPTCHA_SOLVE_ENABLED=true in .env to enable for authorized workflows only."
+)
 
 
 class CapSolverAdapter(CaptchaAdapter):
@@ -25,6 +31,16 @@ class CapSolverAdapter(CaptchaAdapter):
         self._timeout = timeout
 
     async def solve(self, site_key: str, page_url: str) -> dict[str, Any]:
+        if not settings.CAPTCHA_SOLVE_ENABLED:
+            logger.warning("CAPTCHA solve blocked by policy (CAPTCHA_SOLVE_ENABLED=false)")
+            return {
+                "solved": False,
+                "error": CAPTCHA_POLICY_MESSAGE,
+                "provider": "capsolver",
+                "is_mock": False,
+                "policy_blocked": True,
+            }
+
         if not self._api_key:
             raise ValueError("CapSolver API key not configured")
 

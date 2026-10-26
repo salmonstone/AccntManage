@@ -53,10 +53,30 @@ export default function Settings() {
           <input type="number" value={form.backup_retention_days || ''} onChange={e => setForm({...form, backup_retention_days: parseInt(e.target.value) || 1})} />
         </div>
         <div className="form-group">
+          <label className="form-label">Default Mailbox Credential Format</label>
+          <select value={form.mailbox_format || 'oauth'} onChange={e => setForm({...form, mailbox_format: e.target.value})}>
+            <option value="oauth">OAuth (Authorization Code Flow)</option>
+            <option value="email_password_clientid_token">email:password:clientId:authToken</option>
+            <option value="email_password_refresh_clientid">email:password:refreshToken:clientId</option>
+          </select>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Preferred import format for mailbox credentials</span>
+        </div>
+        <div className="form-group">
+          <label className="form-label">Active CAPTCHA Provider</label>
+          <select value={form.captcha_provider || 'capsolver'} onChange={e => setForm({...form, captcha_provider: e.target.value})}>
+            <option value="capsolver">CapSolver</option>
+            <option value="anticaptcha">AntiCaptcha</option>
+            <option value="twocaptcha">2Captcha</option>
+            <option value="ezcaptcha">EzCaptcha</option>
+          </select>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>CAPTCHA solving is disabled by default policy</span>
+        </div>
+        <div className="form-group">
           <label className="form-label">Theme</label>
           <select value={form.theme || 'light'} onChange={e => {
             setForm({...form, theme: e.target.value});
             document.documentElement.setAttribute('data-theme', e.target.value);
+            try { localStorage.setItem('theme', e.target.value); } catch {}
           }}>
             <option value="light">Light</option>
             <option value="dark">Dark</option>

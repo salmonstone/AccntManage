@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from backend.app.models.enums import AccountStatus, JobStatus
+
+class ActivityDay(BaseModel):
+    date: str
+    count: int
 
 
 class DashboardMetrics(BaseModel):
@@ -17,6 +20,10 @@ class DashboardMetrics(BaseModel):
     proxies_passed: int = 0
     proxies_failed: int = 0
     mailboxes_authorized: int = 0
+    live_accounts: int = 0
+    mock_accounts: int = 0
+    job_status_breakdown: dict[str, int] = {}
+    activity_timeline: list[ActivityDay] = []
 
 
 class RecentActivity(BaseModel):

@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from backend.app.api.v1 import (
     accounts,
+    auth,
     backups,
     dashboard,
     diagnostics,
@@ -19,6 +20,7 @@ from backend.app.api.v1 import (
 api_router = APIRouter(prefix="/api/v1")
 
 api_router.include_router(health.router)
+api_router.include_router(auth.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(accounts.router)
 api_router.include_router(mailboxes.router)

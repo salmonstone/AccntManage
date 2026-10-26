@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,11 +19,32 @@ logger = logging.getLogger(__name__)
 TERMINAL_STATUSES = {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED, JobStatus.TIMED_OUT}
 
 
+async def _broadcast_job_event(event_type: str, job_id: int, status: str) -> None:
+    try:
+        from backend.app.api.v1.websocket import broadcast
+        await broadcast({"type": event_type, "job_id": job_id, "status": status})
+    except Exception:
+        pass
+
+
 class JobService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def create(self, job_type: JobType, params: dict | None = None) -> Job:
+    async def create(
+        self,
+        job_type: JobType,
+        params: dict | None = None,
+        idempotency_key: str | None = None,
+    ) -> Job:
+        if idempotency_key:
+            existing = await self._session.execute(
+                select(Job).where(Job.idempotency_key == idempotency_key)
+            )
+            found = existing.scalar_one_or_none()
+            if found:
+                return found
+
         queued_count = (
             await self._session.execute(
                 select(func.count(Job.id)).where(
@@ -39,6 +60,7 @@ class JobService:
             job_type=job_type,
             status=JobStatus.QUEUED,
             correlation_id=generate_correlation_id(),
+            idempotency_key=idempotency_key,
             params_json=json.dumps(params) if params else None,
             max_retries=settings.MAX_RETRIES,
         )
@@ -89,7 +111,7 @@ class JobService:
         if job.status in TERMINAL_STATUSES:
             raise ValueError(f"Cannot cancel job in {job.status.value} state")
         job.status = JobStatus.CANCELLED
-        job.completed_at = datetime.now(timezone.utc)
+        job.completed_at = datetime.now(UTC)
         await self._session.commit()
         return job
 
@@ -103,7 +125,7 @@ class JobService:
         job = await self.get(job_id)
         if not job or job.status in TERMINAL_STATUSES:
             return
-        job.progress = min(progress, 100.0)
+        job.progress = max(job.progress, min(progress, 100.0))
         if completed_items is not None:
             job.completed_items = completed_items
         if failed_items is not None:
@@ -115,8 +137,9 @@ class JobService:
         if not job or job.status != JobStatus.QUEUED:
             return
         job.status = JobStatus.RUNNING
-        job.started_at = datetime.now(timezone.utc)
+        job.started_at = datetime.now(UTC)
         await self._session.commit()
+        await _broadcast_job_event("job_update", job_id, "running")
 
     async def mark_completed(self, job_id: int, result_data: dict | None = None) -> None:
         job = await self.get(job_id)
@@ -124,10 +147,11 @@ class JobService:
             return
         job.status = JobStatus.COMPLETED
         job.progress = 100.0
-        job.completed_at = datetime.now(timezone.utc)
+        job.completed_at = datetime.now(UTC)
         if result_data:
             job.result_json = json.dumps(result_data)
         await self._session.commit()
+        await _broadcast_job_event("job_completed", job_id, "completed")
 
     async def mark_failed(self, job_id: int, error: str) -> None:
         job = await self.get(job_id)
@@ -135,8 +159,9 @@ class JobService:
             return
         job.status = JobStatus.FAILED
         job.error_message = error[:2000]
-        job.completed_at = datetime.now(timezone.utc)
+        job.completed_at = datetime.now(UTC)
         await self._session.commit()
+        await _broadcast_job_event("job_failed", job_id, "failed")
 
     async def recover_interrupted(self) -> int:
         result = await self._session.execute(

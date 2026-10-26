@@ -7,7 +7,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -87,7 +86,6 @@ class WorkerService:
     async def _run_workflow(
         self, session: AsyncSession, job_type: JobType, params: dict
     ) -> dict:
-        from backend.app.models.enums import AccountPlatform
         from backend.app.services.workflow_service import WorkflowService
         from backend.app.workflows.battlenet import create_battlenet_workflow
         from backend.app.workflows.engine import WorkflowEngine, WorkflowExecution

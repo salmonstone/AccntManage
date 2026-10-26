@@ -20,6 +20,7 @@ from backend.app.schemas.common import (
 )
 from backend.app.services.account_service import AccountService
 from backend.app.services.audit_service import AuditService
+from backend.app.services.workflow_service import WorkflowService
 
 router = APIRouter(prefix="/accounts", tags=["Accounts"])
 
@@ -158,9 +159,21 @@ async def commit_import(
         "account",
         details=f"Imported {result['imported']} {data.platform.value} accounts",
     )
-    return SuccessResponse(
-        message=f"Imported {result['imported']} accounts ({result['duplicates']} duplicates, {result['invalid']} invalid)"
-    )
+
+    workflows_started = 0
+    if data.auto_workflow and result["imported_ids"]:
+        wf_svc = WorkflowService(session)
+        for account_id in result["imported_ids"]:
+            try:
+                await wf_svc.create_and_enqueue(data.platform, account_id)
+                workflows_started += 1
+            except Exception:
+                pass
+
+    msg = f"Imported {result['imported']} accounts ({result['duplicates']} duplicates, {result['invalid']} invalid)"
+    if workflows_started:
+        msg += f". Auto-started {workflows_started} workflows."
+    return SuccessResponse(message=msg)
 
 
 @router.get("/export/csv")

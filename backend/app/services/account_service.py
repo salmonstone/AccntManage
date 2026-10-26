@@ -4,14 +4,13 @@ import csv
 import io
 import logging
 import re
-from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.core.security import generate_correlation_id, mask_secret
 from backend.app.models.account import Account, AccountStatusHistory
-from backend.app.models.enums import AccountPlatform, AccountStatus, AuditAction
+from backend.app.models.enums import AccountPlatform, AccountStatus
 from backend.app.schemas.account import (
     AccountCreate,
     AccountImportPreview,
@@ -170,6 +169,7 @@ class AccountService:
         preview = await self.preview_import(platform, raw_text)
         lines = [l.strip() for l in raw_text.strip().splitlines() if l.strip()]
         imported = 0
+        imported_ids: list[int] = []
         seen: set[str] = set()
 
         for line in lines:
@@ -189,10 +189,12 @@ class AccountService:
             status = AccountStatus.UNVERIFIED if platform == AccountPlatform.TWITCH else AccountStatus.DRAFT
             account = Account(platform=platform, email=email, status=status)
             self._session.add(account)
+            await self._session.flush()
+            imported_ids.append(account.id)
             imported += 1
 
         await self._session.commit()
-        return {"imported": imported, "duplicates": preview.duplicate_count, "invalid": preview.invalid_count}
+        return {"imported": imported, "duplicates": preview.duplicate_count, "invalid": preview.invalid_count, "imported_ids": imported_ids}
 
     async def get_status_history(self, account_id: int) -> list[AccountStatusHistory]:
         result = await self._session.execute(

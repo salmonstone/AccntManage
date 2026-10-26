@@ -29,8 +29,7 @@ class LiveMailboxAdapter(MailboxAdapter):
         subject_filter: str | None = None,
         max_results: int = 25,
     ) -> list[dict[str, Any]]:
-        if max_results > 100:
-            max_results = 100
+        max_results = min(max_results, 100)
 
         filters = []
         if sender_filter:

@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { api } from '../api';
-import { useApi, useNotification } from '../hooks';
+import { useApi, useNotification, useWebSocket } from '../hooks';
 import { Loading, ErrorMessage, StatusBadge, EmptyState, Pagination, ConfirmDialog, Notification } from '../components';
 
 const STATUS_COLORS = {
@@ -79,6 +79,13 @@ export default function BattlenetWorkflows() {
     () => api.workflows.list({ platform: 'battlenet', page }),
     [page]
   );
+
+  const onWsMessage = useCallback((msg) => {
+    if (msg.type === 'workflow_update' || msg.type === 'workflow_completed' || msg.type === 'workflow_failed') {
+      reload();
+    }
+  }, [reload]);
+  useWebSocket(onWsMessage);
 
   const handleCreate = async () => {
     if (!accountId) return notify('Account ID required', 'error');
@@ -194,7 +201,10 @@ export default function BattlenetWorkflows() {
                 <tr key={wf.id}>
                   <td>{wf.id}</td>
                   <td>#{wf.account_id}</td>
-                  <td><StatusBadge status={wf.status} /></td>
+                  <td>
+                    <StatusBadge status={wf.status} />
+                    {wf.is_mock && <span className="badge badge-mock" style={{ marginLeft: 4, fontSize: 10 }}>SIMULATED</span>}
+                  </td>
                   <td>{wf.current_step_index + 1} / {wf.total_steps}</td>
                   <td>{new Date(wf.created_at).toLocaleString()}</td>
                   <td>

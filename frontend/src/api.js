@@ -72,6 +72,8 @@ export const api = {
     get: (type) => request(`/providers/${type}`),
     update: (type, data) => request(`/providers/${type}`, { method: 'PUT', body: JSON.stringify(data) }),
     health: (type) => request(`/providers/${type}/health`, { method: 'POST' }),
+    statusAll: () => request('/providers/status/all'),
+    captchaProfiles: () => request('/providers/captcha/profiles'),
   },
   settings: {
     get: () => request('/settings'),
@@ -81,6 +83,7 @@ export const api = {
     list: () => request('/backups'),
     create: () => request('/backups', { method: 'POST' }),
     delete: (name) => request(`/backups/${name}?confirm=true`, { method: 'DELETE' }),
+    restore: (name) => request(`/backups/${name}/restore?confirm=true`, { method: 'POST' }),
   },
   workflows: {
     list: (params = {}) => {

@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.app.adapters.base import MailboxAdapter
 from backend.app.adapters.live_mailbox import LiveMailboxAdapter
 from backend.app.adapters.mock_mailbox import MockMailboxAdapter
 from backend.app.core.config import settings
@@ -23,6 +24,7 @@ router = APIRouter(prefix="/mailboxes", tags=["Mailboxes"])
 
 
 def _get_mailbox_service(session: AsyncSession) -> MailboxService:
+    adapter: MailboxAdapter
     if settings.MSGRAPH_CLIENT_ID:
         adapter = LiveMailboxAdapter()
     else:
@@ -89,6 +91,24 @@ async def search_messages(
             data.mailbox_id, data.sender_filter, data.subject_filter, data.max_results
         )
         return [MailboxMessageResponse(**m) for m in messages]
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post("/{mailbox_id}/refresh")
+async def refresh_mailbox_token(mailbox_id: int, session: AsyncSession = Depends(get_session)):
+    svc = _get_mailbox_service(session)
+    try:
+        return await svc.refresh_token(mailbox_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/{mailbox_id}/diagnostics")
+async def mailbox_diagnostics(mailbox_id: int, session: AsyncSession = Depends(get_session)):
+    svc = _get_mailbox_service(session)
+    try:
+        return await svc.diagnostics(mailbox_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 

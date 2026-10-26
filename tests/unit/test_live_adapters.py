@@ -20,9 +20,22 @@ async def test_capsolver_not_configured():
 
 
 @pytest.mark.asyncio
-async def test_capsolver_solve_requires_key():
+async def test_capsolver_solve_blocked_by_policy():
     from backend.app.adapters.capsolver import CapSolverAdapter
 
+    adapter = CapSolverAdapter(api_key="")
+    result = await adapter.solve("site-key", "https://example.com")
+    assert result["solved"] is False
+    assert result["policy_blocked"] is True
+    assert "disabled by policy" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_capsolver_solve_requires_key_when_enabled(monkeypatch):
+    from backend.app.adapters.capsolver import CapSolverAdapter
+    from backend.app.core import config
+
+    monkeypatch.setattr(config.settings, "CAPTCHA_SOLVE_ENABLED", True)
     adapter = CapSolverAdapter(api_key="")
     with pytest.raises(ValueError, match="not configured"):
         await adapter.solve("site-key", "https://example.com")
@@ -93,8 +106,8 @@ def test_twitch_workflow_factory():
 
 @pytest.mark.asyncio
 async def test_twitch_no_verification_step():
-    from backend.app.workflows.twitch import TwitchNoVerificationStep
     from backend.app.workflows.engine import StepStatus
+    from backend.app.workflows.twitch import TwitchNoVerificationStep
 
     step = TwitchNoVerificationStep()
     result = await step.execute({})
@@ -131,3 +144,22 @@ async def test_battlenet_phone_no_sms():
     step = BattlenetPhoneVerificationStep(sms_adapter=None)
     result = await step.execute({})
     assert result.status == StepStatus.UNSUPPORTED
+
+
+@pytest.mark.asyncio
+async def test_browser_service_lifecycle():
+    pytest.importorskip("playwright")
+    from backend.app.services.browser_service import BrowserConfig, BrowserService
+
+    config = BrowserConfig(headless=True, timeout_ms=10000)
+    svc = BrowserService(config)
+    assert svc.is_running is False
+
+    await svc.start()
+    assert svc.is_running is True
+
+    page = await svc.new_page()
+    assert page is not None
+
+    await svc.stop()
+    assert svc.is_running is False

@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { api } from '../api';
 import { useApi, useNotification } from '../hooks';
-import { Loading, ErrorMessage, StatusBadge, EmptyState, Pagination, ConfirmDialog, Notification } from '../components';
+import { Loading, ErrorMessage, StatusBadge, EmptyState, Pagination, ConfirmDialog, Notification, maskEmail } from '../components';
 
 export default function Accounts() {
   const [platform, setPlatform] = useState('');
@@ -46,13 +46,24 @@ export default function Accounts() {
           <option value="battlenet">Battle.net</option>
           <option value="twitch">Twitch</option>
         </select>
-        <select value={status} onChange={e => { setStatus(e.target.value); setPage(1); }} style={{ width: 160 }}>
+        <select value={status} onChange={e => { setStatus(e.target.value); setPage(1); }} style={{ width: 200 }}>
           <option value="">All Statuses</option>
           <option value="draft">Draft</option>
+          <option value="local_record_only">Local Record Only</option>
+          <option value="simulated">Simulated</option>
+          <option value="mocked">Mocked</option>
+          <option value="manual_required">Manual Required</option>
+          <option value="unsupported">Unsupported</option>
+          <option value="registration_confirmed">Registration Confirmed</option>
+          <option value="pending_email_verification">Pending Email</option>
+          <option value="email_unverified">Email Unverified</option>
+          <option value="pending_phone_verification">Pending Phone</option>
+          <option value="verified_live">Verified (Live)</option>
           <option value="verified">Verified</option>
           <option value="unverified">Unverified</option>
-          <option value="mocked">Mocked</option>
           <option value="failed">Failed</option>
+          <option value="cancelled">Cancelled</option>
+          <option value="suspended">Suspended</option>
         </select>
         <input
           placeholder="Search email or name..."
@@ -88,7 +99,7 @@ export default function Accounts() {
                 <tbody>
                   {data.items.map(a => (
                     <tr key={a.id}>
-                      <td>{a.email}</td>
+                      <td title={a.email}>{maskEmail(a.email)}</td>
                       <td><StatusBadge status={a.platform} /></td>
                       <td><StatusBadge status={a.status} /></td>
                       <td>{a.display_name || '-'}</td>
@@ -131,6 +142,9 @@ function CreateAccountDialog({ onClose, onSuccess }) {
     <div className="confirm-dialog-overlay" onClick={onClose}>
       <div className="confirm-dialog" onClick={e => e.stopPropagation()} style={{ maxWidth: 480 }}>
         <h3 style={{ color: 'var(--text-primary)' }}>Add Account</h3>
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
+          This creates a local database record only. It does not register an account on the platform.
+        </p>
         {error && <ErrorMessage message={error} />}
         <div className="form-group">
           <label className="form-label">Platform</label>
@@ -159,6 +173,7 @@ function CreateAccountDialog({ onClose, onSuccess }) {
 function ImportDialog({ onClose, onSuccess }) {
   const [platform, setPlatform] = useState('battlenet');
   const [text, setText] = useState('');
+  const [autoWorkflow, setAutoWorkflow] = useState(false);
   const [preview, setPreview] = useState(null);
   const [error, setError] = useState('');
 
@@ -171,7 +186,7 @@ function ImportDialog({ onClose, onSuccess }) {
 
   const doImport = async () => {
     try {
-      await api.accounts.importCommit({ platform, raw_text: text });
+      await api.accounts.importCommit({ platform, raw_text: text, auto_workflow: autoWorkflow });
       onSuccess();
     } catch (e) { setError(e.message); }
   };
@@ -191,6 +206,13 @@ function ImportDialog({ onClose, onSuccess }) {
         <div className="form-group">
           <label className="form-label">Paste emails (one per line)</label>
           <textarea rows={8} value={text} onChange={e => setText(e.target.value)} placeholder="user1@example.com&#10;user2@example.com" />
+        </div>
+        <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input type="checkbox" id="auto-workflow" checked={autoWorkflow} onChange={e => setAutoWorkflow(e.target.checked)} style={{ width: 'auto' }} />
+          <label htmlFor="auto-workflow" style={{ margin: 0, fontSize: 13, cursor: 'pointer' }}>Auto-start workflows after import</label>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+            {platform === 'twitch' ? '(create only, no verification)' : '(registration + email + phone verify)'}
+          </span>
         </div>
         {preview && (
           <div style={{ fontSize: 13, marginBottom: 16, padding: 12, background: 'var(--bg-secondary)', borderRadius: 4 }}>

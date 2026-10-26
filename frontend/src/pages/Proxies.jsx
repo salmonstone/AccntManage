@@ -34,7 +34,7 @@ export default function Proxies() {
             <div className="card" style={{ padding: 0 }}>
               <table>
                 <thead>
-                  <tr><th>Host</th><th>Port</th><th>Protocol</th><th>Status</th><th>Latency</th><th>Actions</th></tr>
+                  <tr><th>Host</th><th>Port</th><th>Protocol</th><th>Status</th><th>Latency</th><th>Last Tested</th><th>Error</th><th>Actions</th></tr>
                 </thead>
                 <tbody>
                   {data.items.map(p => (
@@ -44,6 +44,8 @@ export default function Proxies() {
                       <td>{p.protocol}</td>
                       <td><StatusBadge status={p.test_status} /></td>
                       <td>{p.last_latency_ms ? `${Math.round(p.last_latency_ms)}ms` : '-'}</td>
+                      <td style={{ fontSize: 11 }}>{p.last_test_at ? new Date(p.last_test_at).toLocaleString() : '-'}</td>
+                      <td style={{ fontSize: 11, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--danger)' }} title={p.last_error || ''}>{p.last_error || '-'}</td>
                       <td style={{ display: 'flex', gap: 4 }}>
                         <button className="btn" style={{ padding: '4px 8px', fontSize: 11 }}
                           onClick={async () => {

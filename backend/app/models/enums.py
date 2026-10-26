@@ -10,12 +10,18 @@ class AccountPlatform(str, enum.Enum):
 
 class AccountStatus(str, enum.Enum):
     DRAFT = "draft"
+    LOCAL_RECORD_ONLY = "local_record_only"
+    SIMULATED = "simulated"
     PENDING_EMAIL_VERIFICATION = "pending_email_verification"
     PENDING_PHONE_VERIFICATION = "pending_phone_verification"
+    REGISTRATION_CONFIRMED = "registration_confirmed"
+    EMAIL_UNVERIFIED = "email_unverified"
     VERIFIED = "verified"
+    VERIFIED_LIVE = "verified_live"
     UNVERIFIED = "unverified"
     FAILED = "failed"
     SUSPENDED = "suspended"
+    CANCELLED = "cancelled"
     MOCKED = "mocked"
     MANUAL_REQUIRED = "manual_required"
     UNSUPPORTED = "unsupported"
@@ -67,6 +73,13 @@ class JobType(str, enum.Enum):
     TWITCH_WORKFLOW = "twitch_workflow"
 
 
+class CaptchaProvider(str, enum.Enum):
+    CAPSOLVER = "capsolver"
+    ANTICAPTCHA = "anticaptcha"
+    TWOCAPTCHA = "twocaptcha"
+    EZCAPTCHA = "ezcaptcha"
+
+
 class ProviderType(str, enum.Enum):
     SMS = "sms"
     CAPTCHA = "captcha"
@@ -76,8 +89,13 @@ class ProviderType(str, enum.Enum):
 class ProviderStatus(str, enum.Enum):
     UNCONFIGURED = "unconfigured"
     CONFIGURED = "configured"
+    CONFIGURED_NOT_TESTED = "configured_not_tested"
+    LIVE_TESTED = "live_tested"
     MOCK_ONLY = "mock_only"
     CONNECTED = "connected"
+    UNAVAILABLE = "unavailable"
+    DISABLED = "disabled"
+    UNSUPPORTED = "unsupported"
     ERROR = "error"
 
 

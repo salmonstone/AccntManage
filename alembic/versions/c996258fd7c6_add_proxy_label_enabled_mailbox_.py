@@ -4,16 +4,16 @@ Revision ID: c996258fd7c6
 Revises: b425d03ca2a7
 Create Date: 2026-10-27 02:29:59.948379
 """
-from typing import Sequence, Union
+from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 revision: str = 'c996258fd7c6'
-down_revision: Union[str, None] = 'b425d03ca2a7'
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = 'b425d03ca2a7'
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
