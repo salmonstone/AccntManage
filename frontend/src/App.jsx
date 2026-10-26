@@ -31,6 +31,10 @@ export default function App() {
   const [mockMode, setMockMode] = useState(null);
 
   useEffect(() => {
+    try {
+      const saved = localStorage.getItem('theme');
+      if (saved) document.documentElement.setAttribute('data-theme', saved);
+    } catch {}
     fetch('/api/v1/health')
       .then(r => r.json())
       .then(d => setMockMode(d.mock_mode))
