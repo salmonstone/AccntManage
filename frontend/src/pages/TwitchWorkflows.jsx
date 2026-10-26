@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { api } from '../api';
-import { useApi, useNotification } from '../hooks';
+import { useApi, useNotification, useWebSocket } from '../hooks';
 import { Loading, ErrorMessage, StatusBadge, EmptyState, Pagination, ConfirmDialog, Notification } from '../components';
 
 export default function TwitchWorkflows() {
@@ -14,6 +14,14 @@ export default function TwitchWorkflows() {
   const { data, loading, error, reload } = useApi(
     () => api.workflows.list({ platform: 'twitch', page }),
     [page]
+  );
+
+  const onWsMessage = useCallback((msg) => {
+    if (msg.type === 'workflow_update' || msg.type === 'workflow_completed' || msg.type === 'workflow_failed') {
+      reload();
+    }
+  }, [reload]);
+  useWebSocket(onWsMessage
   );
 
   const handleCreate = async () => {
