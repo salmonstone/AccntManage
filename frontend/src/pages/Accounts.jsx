@@ -173,6 +173,7 @@ function CreateAccountDialog({ onClose, onSuccess }) {
 function ImportDialog({ onClose, onSuccess }) {
   const [platform, setPlatform] = useState('battlenet');
   const [text, setText] = useState('');
+  const [autoWorkflow, setAutoWorkflow] = useState(false);
   const [preview, setPreview] = useState(null);
   const [error, setError] = useState('');
 
@@ -185,7 +186,7 @@ function ImportDialog({ onClose, onSuccess }) {
 
   const doImport = async () => {
     try {
-      await api.accounts.importCommit({ platform, raw_text: text });
+      await api.accounts.importCommit({ platform, raw_text: text, auto_workflow: autoWorkflow });
       onSuccess();
     } catch (e) { setError(e.message); }
   };
@@ -205,6 +206,13 @@ function ImportDialog({ onClose, onSuccess }) {
         <div className="form-group">
           <label className="form-label">Paste emails (one per line)</label>
           <textarea rows={8} value={text} onChange={e => setText(e.target.value)} placeholder="user1@example.com&#10;user2@example.com" />
+        </div>
+        <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input type="checkbox" id="auto-workflow" checked={autoWorkflow} onChange={e => setAutoWorkflow(e.target.checked)} style={{ width: 'auto' }} />
+          <label htmlFor="auto-workflow" style={{ margin: 0, fontSize: 13, cursor: 'pointer' }}>Auto-start workflows after import</label>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+            {platform === 'twitch' ? '(create only, no verification)' : '(registration + email + phone verify)'}
+          </span>
         </div>
         {preview && (
           <div style={{ fontSize: 13, marginBottom: 16, padding: 12, background: 'var(--bg-secondary)', borderRadius: 4 }}>

@@ -58,6 +58,7 @@ class AccountImportRequest(BaseModel):
     platform: AccountPlatform
     raw_text: str = Field(..., max_length=500_000)
     format_hint: str | None = Field(None, max_length=50)
+    auto_workflow: bool = False
 
 
 class AccountImportPreview(BaseModel):
