@@ -3,6 +3,11 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 
+class ActivityDay(BaseModel):
+    date: str
+    count: int
+
+
 class DashboardMetrics(BaseModel):
     total_battlenet_accounts: int = 0
     total_twitch_accounts: int = 0
@@ -17,6 +22,8 @@ class DashboardMetrics(BaseModel):
     mailboxes_authorized: int = 0
     live_accounts: int = 0
     mock_accounts: int = 0
+    job_status_breakdown: dict[str, int] = {}
+    activity_timeline: list[ActivityDay] = []
 
 
 class RecentActivity(BaseModel):

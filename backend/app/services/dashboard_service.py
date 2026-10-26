@@ -20,7 +20,7 @@ LIVE_STATUSES = {AccountStatus.VERIFIED_LIVE, AccountStatus.REGISTRATION_CONFIRM
 from backend.app.models.job import Job
 from backend.app.models.mailbox import Mailbox
 from backend.app.models.proxy import Proxy
-from backend.app.schemas.dashboard import DashboardMetrics, RecentActivity
+from backend.app.schemas.dashboard import ActivityDay, DashboardMetrics, RecentActivity
 
 
 class DashboardService:
@@ -83,6 +83,26 @@ class DashboardService:
             select(func.count(Account.id)).where(Account.status.in_(LIVE_STATUSES))
         )).scalar() or 0
 
+        job_status_rows = (await self._session.execute(
+            select(Job.status, func.count(Job.id)).group_by(Job.status)
+        )).all()
+        job_status_breakdown = {str(row[0].value): row[1] for row in job_status_rows}
+
+        seven_days_ago = now - timedelta(days=7)
+        activity_timeline: list[ActivityDay] = []
+        for i in range(6, -1, -1):
+            day_start = (now - timedelta(days=i)).replace(hour=0, minute=0, second=0, microsecond=0)
+            day_end = day_start + timedelta(days=1)
+            day_count = (await self._session.execute(
+                select(func.count(Job.id)).where(
+                    Job.created_at >= day_start, Job.created_at < day_end
+                )
+            )).scalar() or 0
+            activity_timeline.append(ActivityDay(
+                date=day_start.strftime("%Y-%m-%d"),
+                count=day_count,
+            ))
+
         return DashboardMetrics(
             total_battlenet_accounts=bnet,
             total_twitch_accounts=twitch,
@@ -97,6 +117,8 @@ class DashboardService:
             mailboxes_authorized=mailboxes_auth,
             live_accounts=live_accounts,
             mock_accounts=mock_accounts,
+            job_status_breakdown=job_status_breakdown,
+            activity_timeline=activity_timeline,
         )
 
     async def get_recent_activity(self, limit: int = 20) -> list[RecentActivity]:

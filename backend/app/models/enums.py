@@ -73,6 +73,13 @@ class JobType(str, enum.Enum):
     TWITCH_WORKFLOW = "twitch_workflow"
 
 
+class CaptchaProvider(str, enum.Enum):
+    CAPSOLVER = "capsolver"
+    ANTICAPTCHA = "anticaptcha"
+    TWOCAPTCHA = "twocaptcha"
+    EZCAPTCHA = "ezcaptcha"
+
+
 class ProviderType(str, enum.Enum):
     SMS = "sms"
     CAPTCHA = "captcha"
