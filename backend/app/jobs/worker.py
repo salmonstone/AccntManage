@@ -1,0 +1,152 @@
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+from datetime import datetime, timezone
+
+from sqlalchemy import select
+
+from backend.app.core.config import settings
+from backend.app.db.base import async_session_factory
+from backend.app.models.enums import JobStatus, JobType
+from backend.app.models.job import Job
+from backend.app.services.job_service import JobService
+
+logger = logging.getLogger(__name__)
+
+
+class WorkerSupervisor:
+    def __init__(self) -> None:
+        self._running = False
+        self._tasks: list[asyncio.Task] = []
+        self._semaphore = asyncio.Semaphore(settings.MAX_WORKER_COUNT)
+
+    async def start(self) -> None:
+        self._running = True
+        logger.info("Worker supervisor starting with %d max workers", settings.MAX_WORKER_COUNT)
+
+        async with async_session_factory() as session:
+            svc = JobService(session)
+            recovered = await svc.recover_interrupted()
+            if recovered:
+                logger.info("Recovered %d interrupted jobs", recovered)
+
+        asyncio.create_task(self._poll_loop())
+
+    async def stop(self) -> None:
+        self._running = False
+        for task in self._tasks:
+            task.cancel()
+        if self._tasks:
+            await asyncio.gather(*self._tasks, return_exceptions=True)
+        self._tasks.clear()
+        logger.info("Worker supervisor stopped")
+
+    async def _poll_loop(self) -> None:
+        while self._running:
+            try:
+                async with async_session_factory() as session:
+                    result = await session.execute(
+                        select(Job)
+                        .where(Job.status == JobStatus.QUEUED)
+                        .order_by(Job.created_at.asc())
+                        .limit(settings.MAX_WORKER_COUNT)
+                    )
+                    jobs = result.scalars().all()
+
+                for job in jobs:
+                    if not self._running:
+                        break
+                    await self._semaphore.acquire()
+                    task = asyncio.create_task(self._run_job(job.id, job.job_type))
+                    self._tasks.append(task)
+                    task.add_done_callback(lambda t: self._task_done(t))
+
+            except Exception:
+                logger.exception("Worker poll error")
+
+            await asyncio.sleep(2)
+
+    def _task_done(self, task: asyncio.Task) -> None:
+        self._semaphore.release()
+        if task in self._tasks:
+            self._tasks.remove(task)
+
+    async def _run_job(self, job_id: int, job_type: JobType) -> None:
+        async with async_session_factory() as session:
+            svc = JobService(session)
+            await svc.mark_running(job_id)
+
+            try:
+                await asyncio.wait_for(
+                    self._execute_job(job_id, job_type, svc),
+                    timeout=settings.JOB_TIMEOUT_SECONDS,
+                )
+            except asyncio.TimeoutError:
+                await svc.mark_failed(job_id, "Job timed out")
+            except asyncio.CancelledError:
+                await svc.mark_failed(job_id, "Job cancelled during shutdown")
+            except Exception as e:
+                await svc.mark_failed(job_id, str(e)[:2000])
+
+    async def _execute_job(self, job_id: int, job_type: JobType, svc: JobService) -> None:
+        job = await svc.get(job_id)
+        if not job:
+            return
+
+        params = json.loads(job.params_json) if job.params_json else {}
+
+        if job_type == JobType.PROXY_TEST:
+            await self._run_proxy_test(job_id, params, svc)
+        elif job_type == JobType.ACCOUNT_SIMULATE:
+            await self._run_account_simulation(job_id, params, svc)
+        else:
+            await svc.mark_completed(job_id, {"message": f"Job type {job_type.value} executed"})
+
+    async def _run_proxy_test(self, job_id: int, params: dict, svc: JobService) -> None:
+        from backend.app.services.proxy_service import ProxyService
+
+        proxy_ids = params.get("proxy_ids", [])
+        total = len(proxy_ids)
+
+        async with async_session_factory() as session:
+            proxy_svc = ProxyService(session)
+            completed = 0
+            failed = 0
+
+            for pid in proxy_ids:
+                if not self._running:
+                    break
+                try:
+                    result = await proxy_svc.test_proxy(pid)
+                    if result.status.value == "failed":
+                        failed += 1
+                except Exception:
+                    failed += 1
+                completed += 1
+                progress = (completed / total * 100) if total > 0 else 100
+                await svc.update_progress(job_id, progress, completed, failed)
+
+        await svc.mark_completed(job_id, {"tested": total, "failed": failed})
+
+    async def _run_account_simulation(self, job_id: int, params: dict, svc: JobService) -> None:
+        """
+        Simulates account creation workflow with mock states.
+        This NEVER contacts Battle.net or Twitch — it only updates local records.
+        """
+        await asyncio.sleep(1)
+        await svc.update_progress(job_id, 25.0)
+        await asyncio.sleep(1)
+        await svc.update_progress(job_id, 50.0)
+        await asyncio.sleep(1)
+        await svc.update_progress(job_id, 75.0)
+        await asyncio.sleep(1)
+        await svc.mark_completed(job_id, {
+            "message": "Simulation complete",
+            "is_mock": True,
+            "note": "No live account operations were performed",
+        })
+
+
+worker_supervisor = WorkerSupervisor()
