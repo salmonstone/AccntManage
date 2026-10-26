@@ -6,6 +6,7 @@ import { Loading, ErrorMessage, EmptyState, ConfirmDialog, Notification } from '
 export default function Backups() {
   const { data, loading, error, reload } = useApi(() => api.backups.list());
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [restoreTarget, setRestoreTarget] = useState(null);
   const { notification, notify } = useNotification();
 
   return (
@@ -33,7 +34,9 @@ export default function Backups() {
                       <td>{b.name}</td>
                       <td>{(b.size_bytes / 1024).toFixed(1)} KB</td>
                       <td>{new Date(b.created_at).toLocaleString()}</td>
-                      <td>
+                      <td style={{ display: 'flex', gap: 4 }}>
+                        <button className="btn" style={{ padding: '4px 8px', fontSize: 11 }}
+                          onClick={() => setRestoreTarget(b.name)}>Restore</button>
                         <button className="btn btn-danger" style={{ padding: '4px 8px', fontSize: 11 }}
                           onClick={() => setDeleteTarget(b.name)}>Delete</button>
                       </td>
@@ -44,6 +47,18 @@ export default function Backups() {
             </div>
           )}
         </>
+      )}
+      {restoreTarget && (
+        <ConfirmDialog
+          title="Restore Backup"
+          message={`This will overwrite the current database with "${restoreTarget}". The server must be restarted after restoring.`}
+          onConfirm={async () => {
+            try { await api.backups.restore(restoreTarget); notify('Backup restored — restart the server to apply', 'success'); }
+            catch (e) { notify(e.message, 'error'); }
+            setRestoreTarget(null);
+          }}
+          onCancel={() => setRestoreTarget(null)}
+        />
       )}
       {deleteTarget && (
         <ConfirmDialog

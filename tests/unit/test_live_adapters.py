@@ -144,3 +144,22 @@ async def test_battlenet_phone_no_sms():
     step = BattlenetPhoneVerificationStep(sms_adapter=None)
     result = await step.execute({})
     assert result.status == StepStatus.UNSUPPORTED
+
+
+@pytest.mark.asyncio
+async def test_browser_service_lifecycle():
+    pytest.importorskip("playwright")
+    from backend.app.services.browser_service import BrowserConfig, BrowserService
+
+    config = BrowserConfig(headless=True, timeout_ms=10000)
+    svc = BrowserService(config)
+    assert svc.is_running is False
+
+    await svc.start()
+    assert svc.is_running is True
+
+    page = await svc.new_page()
+    assert page is not None
+
+    await svc.stop()
+    assert svc.is_running is False

@@ -49,6 +49,17 @@ class BackupService:
             raise ValueError("Backup not found")
         path.unlink()
 
+    def restore_backup(self, name: str) -> None:
+        safe_name = Path(name).name
+        if safe_name != name or ".." in name:
+            raise ValueError("Invalid backup name")
+        backup_path = BACKUP_DIR / safe_name
+        if not backup_path.exists():
+            raise ValueError("Backup not found")
+        db_path = settings.DATABASE_URL.split("///")[-1]
+        shutil.copy2(str(backup_path), db_path)
+        logger.info("Backup restored: %s", name)
+
     def cleanup_old_backups(self) -> int:
         cutoff = datetime.now(timezone.utc).timestamp() - (settings.BACKUP_RETENTION_DAYS * 86400)
         removed = 0

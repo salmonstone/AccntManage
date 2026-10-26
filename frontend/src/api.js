@@ -81,6 +81,7 @@ export const api = {
     list: () => request('/backups'),
     create: () => request('/backups', { method: 'POST' }),
     delete: (name) => request(`/backups/${name}?confirm=true`, { method: 'DELETE' }),
+    restore: (name) => request(`/backups/${name}/restore?confirm=true`, { method: 'POST' }),
   },
   workflows: {
     list: (params = {}) => {
