@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { api } from '../api';
 import { useApi } from '../hooks';
-import { Loading, ErrorMessage } from '../components';
+import { Loading, ErrorMessage, StatusBadge } from '../components';
 
 export default function Diagnostics() {
   const { data: health, loading, error } = useApi(() => api.health());
@@ -33,6 +33,23 @@ export default function Diagnostics() {
           </div>
         )}
       </div>
+
+      {health && health.provider_statuses && (
+        <div className="card">
+          <div className="card-title">Provider Status</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+            {Object.entries(health.provider_statuses).map(([name, status]) => (
+              <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                <strong style={{ textTransform: 'capitalize' }}>{name}</strong>
+                <StatusBadge status={status} />
+                {health.providers_mock?.[name] && (
+                  <span style={{ fontSize: 10, color: '#ff9800' }}>(mock)</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="card">
         <div className="card-title">Application Logs</div>
