@@ -22,6 +22,7 @@ class Job(Base):
     completed_items: Mapped[int] = mapped_column(Integer, default=0)
     failed_items: Mapped[int] = mapped_column(Integer, default=0)
     correlation_id: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(64), unique=True, index=True)
     params_json: Mapped[str | None] = mapped_column(Text)
     result_json: Mapped[str | None] = mapped_column(Text)
     error_message: Mapped[str | None] = mapped_column(Text)

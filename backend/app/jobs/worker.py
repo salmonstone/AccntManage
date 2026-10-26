@@ -101,6 +101,8 @@ class WorkerSupervisor:
             await self._run_proxy_test(job_id, params, svc)
         elif job_type == JobType.ACCOUNT_SIMULATE:
             await self._run_account_simulation(job_id, params, svc)
+        elif job_type in (JobType.BATTLENET_WORKFLOW, JobType.TWITCH_WORKFLOW):
+            await self._run_workflow(job_id, params, svc)
         else:
             await svc.mark_completed(job_id, {"message": f"Job type {job_type.value} executed"})
 
@@ -129,6 +131,47 @@ class WorkerSupervisor:
                 await svc.update_progress(job_id, progress, completed, failed)
 
         await svc.mark_completed(job_id, {"tested": total, "failed": failed})
+
+    async def _run_workflow(self, job_id: int, params: dict, svc: JobService) -> None:
+        workflow_execution_id = params.get("workflow_execution_id")
+        if not workflow_execution_id:
+            await svc.mark_failed(job_id, "Missing workflow_execution_id in params")
+            return
+
+        from backend.app.services.workflow_service import WorkflowService
+        from backend.app.workflows.engine import WorkflowEngine, WorkflowExecution as EngineExecution
+        from backend.app.models.workflow import WorkflowExecution as WorkflowModel
+        from backend.app.workflows.battlenet import create_battlenet_workflow
+        from backend.app.workflows.twitch import create_twitch_workflow
+
+        async with async_session_factory() as session:
+            result = await session.execute(
+                select(WorkflowModel).where(WorkflowModel.id == workflow_execution_id)
+            )
+            wf_model = result.scalar_one_or_none()
+            if not wf_model:
+                await svc.mark_failed(job_id, f"Workflow execution {workflow_execution_id} not found")
+                return
+
+            if wf_model.platform == "battlenet":
+                defn = create_battlenet_workflow()
+            elif wf_model.platform == "twitch":
+                defn = create_twitch_workflow()
+            else:
+                await svc.mark_failed(job_id, f"Unknown platform: {wf_model.platform}")
+                return
+
+            execution = EngineExecution(defn, wf_model.account_id)
+            engine = WorkflowEngine()
+            execution = await engine.run(execution)
+
+            wf_svc = WorkflowService(session)
+            await wf_svc.update_from_execution(workflow_execution_id, execution)
+
+            await svc.mark_completed(job_id, {
+                "workflow_status": execution.status.value,
+                "steps_completed": len(execution.step_results),
+            })
 
     async def _run_account_simulation(self, job_id: int, params: dict, svc: JobService) -> None:
         """

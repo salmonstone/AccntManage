@@ -118,3 +118,28 @@ async def test_account_status_history(client: AsyncClient):
     history = resp.json()
     assert len(history) >= 1
     assert history[0]["new_status"] == "draft"
+
+
+@pytest.mark.asyncio
+async def test_new_account_statuses(client: AsyncClient):
+    """Verify spec-required status values are accepted."""
+    create_resp = await client.post("/api/v1/accounts", json={
+        "platform": "battlenet",
+        "email": "statuses@example.com",
+    })
+    account_id = create_resp.json()["id"]
+
+    for status in [
+        "local_record_only",
+        "simulated",
+        "registration_confirmed",
+        "email_unverified",
+        "verified_live",
+        "cancelled",
+    ]:
+        resp = await client.patch(
+            f"/api/v1/accounts/{account_id}",
+            json={"status": status},
+        )
+        assert resp.status_code == 200, f"Status {status} rejected"
+        assert resp.json()["status"] == status

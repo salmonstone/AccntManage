@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     SMS_PROVIDER_BASE_URL: str = ""
     SMS_PROVIDER_NAME: str = "generic"
 
+    CAPTCHA_SOLVE_ENABLED: bool = False
+
     BROWSER_HEADLESS: bool = True
     BROWSER_TIMEOUT_MS: int = 30000
     PROXY_URL: str = ""

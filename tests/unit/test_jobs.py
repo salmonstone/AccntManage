@@ -41,3 +41,22 @@ async def test_cancel_completed_job_fails(client: AsyncClient):
     await client.post(f"/api/v1/jobs/{job_id}/cancel")
     resp = await client.post(f"/api/v1/jobs/{job_id}/cancel")
     assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_idempotency_key_dedup(client: AsyncClient):
+    payload = {
+        "job_type": "proxy_test",
+        "params": {"proxy_ids": [1]},
+        "idempotency_key": "test-idem-key-001",
+    }
+    resp1 = await client.post("/api/v1/jobs", json=payload)
+    assert resp1.status_code == 201
+    job1 = resp1.json()
+
+    resp2 = await client.post("/api/v1/jobs", json=payload)
+    assert resp2.status_code == 201
+    job2 = resp2.json()
+
+    assert job1["id"] == job2["id"]
+    assert job1["idempotency_key"] == "test-idem-key-001"

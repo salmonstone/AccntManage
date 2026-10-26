@@ -23,7 +23,20 @@ class JobService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def create(self, job_type: JobType, params: dict | None = None) -> Job:
+    async def create(
+        self,
+        job_type: JobType,
+        params: dict | None = None,
+        idempotency_key: str | None = None,
+    ) -> Job:
+        if idempotency_key:
+            existing = await self._session.execute(
+                select(Job).where(Job.idempotency_key == idempotency_key)
+            )
+            found = existing.scalar_one_or_none()
+            if found:
+                return found
+
         queued_count = (
             await self._session.execute(
                 select(func.count(Job.id)).where(
@@ -39,6 +52,7 @@ class JobService:
             job_type=job_type,
             status=JobStatus.QUEUED,
             correlation_id=generate_correlation_id(),
+            idempotency_key=idempotency_key,
             params_json=json.dumps(params) if params else None,
             max_retries=settings.MAX_RETRIES,
         )
@@ -103,7 +117,7 @@ class JobService:
         job = await self.get(job_id)
         if not job or job.status in TERMINAL_STATUSES:
             return
-        job.progress = min(progress, 100.0)
+        job.progress = max(job.progress, min(progress, 100.0))
         if completed_items is not None:
             job.completed_items = completed_items
         if failed_items is not None:

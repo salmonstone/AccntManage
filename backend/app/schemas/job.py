@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from backend.app.models.enums import JobStatus, JobType
 
@@ -18,6 +18,7 @@ class JobResponse(BaseModel):
     completed_items: int
     failed_items: int
     correlation_id: str
+    idempotency_key: str | None
     error_message: str | None
     retry_count: int
     max_retries: int
@@ -30,3 +31,4 @@ class JobResponse(BaseModel):
 class JobCreateRequest(BaseModel):
     job_type: JobType
     params: dict | None = None
+    idempotency_key: str | None = Field(None, max_length=64)

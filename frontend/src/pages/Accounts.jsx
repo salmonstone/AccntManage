@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { api } from '../api';
 import { useApi, useNotification } from '../hooks';
-import { Loading, ErrorMessage, StatusBadge, EmptyState, Pagination, ConfirmDialog, Notification } from '../components';
+import { Loading, ErrorMessage, StatusBadge, EmptyState, Pagination, ConfirmDialog, Notification, maskEmail } from '../components';
 
 export default function Accounts() {
   const [platform, setPlatform] = useState('');
@@ -88,7 +88,7 @@ export default function Accounts() {
                 <tbody>
                   {data.items.map(a => (
                     <tr key={a.id}>
-                      <td>{a.email}</td>
+                      <td title={a.email}>{maskEmail(a.email)}</td>
                       <td><StatusBadge status={a.platform} /></td>
                       <td><StatusBadge status={a.status} /></td>
                       <td>{a.display_name || '-'}</td>

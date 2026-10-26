@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { api } from '../api';
 import { useApi, useNotification } from '../hooks';
-import { Loading, ErrorMessage, StatusBadge, EmptyState, Pagination, ConfirmDialog, Notification } from '../components';
+import { Loading, ErrorMessage, StatusBadge, EmptyState, Pagination, ConfirmDialog, Notification, maskEmail } from '../components';
 
 export default function Mailboxes() {
   const [page, setPage] = useState(1);
@@ -41,7 +41,7 @@ export default function Mailboxes() {
                 <tbody>
                   {data.items.map(m => (
                     <tr key={m.id}>
-                      <td>{m.email}</td>
+                      <td title={m.email}>{maskEmail(m.email)}</td>
                       <td><StatusBadge status={m.status} /></td>
                       <td>{m.scopes || '-'}</td>
                       <td>{new Date(m.created_at).toLocaleDateString()}</td>

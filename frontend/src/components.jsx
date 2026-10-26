@@ -75,3 +75,10 @@ export function ErrorMessage({ message }) {
   if (!message) return null;
   return <div className="error-msg">{message}</div>;
 }
+
+export function maskEmail(email) {
+  if (!email || !email.includes('@')) return email || '';
+  const [local, domain] = email.split('@');
+  const visible = Math.min(3, local.length);
+  return local.slice(0, visible) + '****@' + domain;
+}

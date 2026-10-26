@@ -17,7 +17,7 @@ router = APIRouter(prefix="/jobs", tags=["Jobs"])
 async def create_job(data: JobCreateRequest, session: AsyncSession = Depends(get_session)):
     svc = JobService(session)
     try:
-        job = await svc.create(data.job_type, data.params)
+        job = await svc.create(data.job_type, data.params, data.idempotency_key)
         return JobResponse.model_validate(job)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
