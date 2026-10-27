@@ -79,12 +79,15 @@ class BrowserService:
         if self._config.proxy:
             launch_opts["proxy"] = self._config.proxy
 
-        executable = Path("/opt/pw-browsers/chromium-1243/chrome-linux64/chrome")
-        if executable.exists():
-            launch_opts["executable_path"] = str(executable)
-
-        self._browser = await self._playwright.chromium.launch(**launch_opts)
-        logger.info("Browser started (headless=%s)", self._config.headless)
+        try:
+            self._browser = await self._playwright.chromium.launch(
+                channel="chrome", **launch_opts
+            )
+            logger.info("Browser started with system Chrome (headless=%s)", self._config.headless)
+        except Exception:
+            logger.info("System Chrome not found, falling back to bundled Chromium")
+            self._browser = await self._playwright.chromium.launch(**launch_opts)
+            logger.info("Browser started with Chromium (headless=%s)", self._config.headless)
 
     async def new_page(self) -> Any:
         if not self._browser:
