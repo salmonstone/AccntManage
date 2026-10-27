@@ -46,17 +46,34 @@ class CapSolverAdapter(CaptchaAdapter):
 
         try:
             import asyncio
+            from urllib.parse import urlparse
+
+            task_data: dict[str, Any] = {
+                "websiteURL": page_url,
+                "websitePublicKey": site_key,
+            }
+
+            # Use proxied task type when PROXY_URL is available
+            if settings.PROXY_URL:
+                parsed = urlparse(settings.PROXY_URL)
+                task_data["type"] = "FunCaptchaTask"
+                task_data["proxyType"] = "http"
+                task_data["proxyAddress"] = parsed.hostname
+                task_data["proxyPort"] = parsed.port
+                if parsed.username:
+                    task_data["proxyLogin"] = parsed.username
+                if parsed.password:
+                    task_data["proxyPassword"] = parsed.password
+            else:
+                task_data["type"] = "FunCaptchaTaskProxyLess"
+
             async with httpx.AsyncClient(timeout=self._timeout) as client:
                 task_payload: dict[str, Any] = {
                     "clientKey": self._api_key,
-                    "task": {
-                        "type": "FunCaptchaTaskProxyLess",
-                        "websiteURL": page_url,
-                        "websitePublicKey": site_key,
-                    },
+                    "task": task_data,
                 }
-                logger.info("CapSolver createTask: type=FunCaptchaTaskProxyLess, key=%s..., url=%s",
-                            site_key[:12], page_url)
+                logger.info("CapSolver createTask: type=%s, key=%s..., url=%s, proxy=%s",
+                            task_data["type"], site_key[:12], page_url, bool(settings.PROXY_URL))
 
                 create_resp = await client.post(
                     f"{CAPSOLVER_API_URL}/createTask",
