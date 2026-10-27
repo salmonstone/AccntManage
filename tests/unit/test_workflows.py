@@ -87,6 +87,41 @@ async def test_cancel_completed_fails(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_run_workflow(client: AsyncClient):
+    create_resp = await client.post("/api/v1/workflows", json={
+        "platform": "twitch",
+        "account_id": 1,
+    })
+    wf_id = create_resp.json()["id"]
+
+    resp = await client.post(f"/api/v1/workflows/{wf_id}/run")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "created"
+    assert data["current_step_index"] == 0
+    assert data["job_id"] is not None
+
+
+@pytest.mark.asyncio
+async def test_run_cancelled_workflow_fails(client: AsyncClient):
+    create_resp = await client.post("/api/v1/workflows", json={
+        "platform": "twitch",
+        "account_id": 1,
+    })
+    wf_id = create_resp.json()["id"]
+    await client.post(f"/api/v1/workflows/{wf_id}/cancel")
+
+    resp = await client.post(f"/api/v1/workflows/{wf_id}/run")
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_run_not_found(client: AsyncClient):
+    resp = await client.post("/api/v1/workflows/99999/run")
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
 async def test_workflow_engine_step_execution():
     from backend.app.workflows.engine import (
         StepResult,

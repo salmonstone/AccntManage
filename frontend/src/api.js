@@ -93,6 +93,7 @@ export const api = {
     get: (id) => request(`/workflows/${id}`),
     create: (data) => request('/workflows', { method: 'POST', body: JSON.stringify(data) }),
     cancel: (id) => request(`/workflows/${id}/cancel`, { method: 'POST' }),
+    run: (id) => request(`/workflows/${id}/run`, { method: 'POST' }),
   },
   health: () => request('/health'),
   diagnostics: {

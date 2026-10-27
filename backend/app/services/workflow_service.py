@@ -8,7 +8,9 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.app.core.config import settings
 from backend.app.core.security import generate_correlation_id
+from backend.app.models.account import Account
 from backend.app.models.enums import AccountPlatform, JobType
 from backend.app.models.workflow import WorkflowExecution as WorkflowExecutionModel
 from backend.app.schemas.workflow import WorkflowResponse, WorkflowStepResultResponse
@@ -65,6 +67,19 @@ class WorkflowService:
 
         correlation_id = generate_correlation_id()
 
+        ctx = dict(context or {})
+        ctx.setdefault("account_id", account_id)
+        ctx.setdefault("mock_mode", settings.MOCK_MODE)
+
+        account_result = await self._session.execute(
+            select(Account).where(Account.id == account_id)
+        )
+        account = account_result.scalar_one_or_none()
+        if account:
+            ctx.setdefault("email", account.email)
+            if account.display_name:
+                ctx.setdefault("display_name", account.display_name)
+
         model = WorkflowExecutionModel(
             workflow_name=defn.name,
             platform=defn.platform,
@@ -73,7 +88,7 @@ class WorkflowService:
             current_step_index=0,
             total_steps=len(defn.steps),
             step_results_json="[]",
-            context_json=json.dumps(context or {"account_id": account_id}),
+            context_json=json.dumps(ctx),
             correlation_id=correlation_id,
         )
         self._session.add(model)
@@ -158,6 +173,34 @@ class WorkflowService:
             except ValueError:
                 pass
         await self._session.commit()
+        return _model_to_response(m)
+
+    async def run(self, workflow_id: int) -> WorkflowResponse:
+        result = await self._session.execute(
+            select(WorkflowExecutionModel).where(WorkflowExecutionModel.id == workflow_id)
+        )
+        m = result.scalar_one_or_none()
+        if not m:
+            raise ValueError("Workflow not found")
+
+        runnable = {WorkflowStatus.CREATED, WorkflowStatus.PAUSED_MANUAL, WorkflowStatus.FAILED}
+        if m.status not in runnable:
+            raise ValueError(f"Cannot run workflow in {m.status.value} state")
+
+        m.status = WorkflowStatus.CREATED
+        m.step_results_json = "[]"
+        m.current_step_index = 0
+
+        job_type = (
+            JobType.BATTLENET_WORKFLOW
+            if m.platform == "battlenet"
+            else JobType.TWITCH_WORKFLOW
+        )
+        job_svc = JobService(self._session)
+        job = await job_svc.create(job_type, {"workflow_execution_id": m.id})
+        m.job_id = job.id
+        await self._session.commit()
+
         return _model_to_response(m)
 
     async def update_from_execution(

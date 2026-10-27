@@ -48,6 +48,18 @@ async def get_workflow(
     return result
 
 
+@router.post("/{workflow_id}/run", response_model=WorkflowResponse)
+async def run_workflow(
+    workflow_id: int,
+    session: AsyncSession = Depends(get_session),
+):
+    svc = WorkflowService(session)
+    try:
+        return await svc.run(workflow_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.post("/{workflow_id}/cancel", response_model=WorkflowResponse)
 async def cancel_workflow(
     workflow_id: int,

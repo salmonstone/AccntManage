@@ -74,6 +74,7 @@ export default function BattlenetWorkflows() {
   const [accounts, setAccounts] = useState([]);
   const [selectedWf, setSelectedWf] = useState(null);
   const [cancelId, setCancelId] = useState(null);
+  const [runningId, setRunningId] = useState(null);
   const { notification, notify } = useNotification();
 
   const { data, loading, error, reload } = useApi(
@@ -106,6 +107,19 @@ export default function BattlenetWorkflows() {
       reload();
     } catch (e) {
       notify(e.message, 'error');
+    }
+  };
+
+  const handleRun = async (id) => {
+    setRunningId(id);
+    try {
+      await api.workflows.run(id);
+      notify('Workflow queued for execution', 'success');
+      reload();
+    } catch (e) {
+      notify(e.message, 'error');
+    } finally {
+      setRunningId(null);
     }
   };
 
@@ -224,6 +238,11 @@ export default function BattlenetWorkflows() {
                   <td>{new Date(wf.created_at).toLocaleString()}</td>
                   <td>
                     <button className="btn btn-sm" onClick={() => loadDetail(wf.id)}>Details</button>
+                    {['created', 'paused_manual', 'failed'].includes(wf.status) && (
+                      <button className="btn btn-sm btn-primary" onClick={() => handleRun(wf.id)} disabled={runningId === wf.id} style={{ marginLeft: 4 }}>
+                        {runningId === wf.id ? 'Starting...' : 'Run'}
+                      </button>
+                    )}
                     {!['completed', 'failed', 'cancelled'].includes(wf.status) && (
                       <button className="btn btn-sm btn-danger" onClick={() => setCancelId(wf.id)} style={{ marginLeft: 4 }}>Cancel</button>
                     )}
