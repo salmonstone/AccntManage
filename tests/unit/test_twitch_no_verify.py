@@ -1,4 +1,4 @@
-"""Confirm Twitch workflow has no real email verification step.
+"""Confirm Twitch workflow pipeline structure and no email verification.
 
 CLIENT REQUIREMENT: Twitch accounts must NOT be email-verified by this tool.
 """
@@ -12,58 +12,63 @@ from backend.app.workflows.engine import (
     WorkflowExecution,
     WorkflowStatus,
 )
-from backend.app.workflows.twitch import TwitchNoVerificationStep, create_twitch_workflow
+from backend.app.workflows.twitch import (
+    UpdateStatusStep,
+    create_twitch_workflow,
+)
 
 
 @pytest.mark.asyncio
 async def test_twitch_workflow_has_no_email_verify_step():
     wf = create_twitch_workflow()
     step_names = [s.name for s in wf.steps]
-    assert "email_verification" not in " ".join(step_names).replace("_skipped", "").replace("twitch_email_verification", "")
-    for step in wf.steps:
-        if "email" in step.name and "verification" in step.name:
-            assert "skipped" in step.name, (
-                f"Found email verification step '{step.name}' that is not marked as skipped"
-            )
+    for name in step_names:
+        assert "email_verification" not in name, (
+            f"Found email verification step '{name}' — Twitch must not verify emails"
+        )
 
 
 @pytest.mark.asyncio
-async def test_twitch_no_verification_step_returns_skipped():
-    step = TwitchNoVerificationStep()
-    result = await step.execute({"account_id": 1})
-    assert result.status == StepStatus.SKIPPED
-    assert "intentionally" in result.message.lower()
-    assert result.data.get("policy") == "no_twitch_email_verification"
+async def test_twitch_update_status_completes_without_db():
+    step = UpdateStatusStep()
+    context = {"account_id": 1, "registration_submitted": True}
+    result = await step.execute(context)
+    assert result.status == StepStatus.COMPLETED
+    assert result.data.get("status_updated") is False
 
 
 @pytest.mark.asyncio
-async def test_twitch_no_verification_step_is_not_required():
-    step = TwitchNoVerificationStep()
-    assert step.required is False
-
-
-@pytest.mark.asyncio
-async def test_twitch_workflow_completes_without_browser():
-    wf = create_twitch_workflow(browser_service=None)
-    execution = WorkflowExecution(wf, account_id=1)
-    engine = WorkflowEngine()
-    result = await engine.run(execution)
-
-    assert result.status == WorkflowStatus.PAUSED_MANUAL
-    assert result.step_results[0]["step"] == "twitch_registration"
-    assert result.step_results[0]["status"] == "manual_required"
-
-
-@pytest.mark.asyncio
-async def test_twitch_workflow_only_two_steps():
+async def test_twitch_workflow_has_eight_steps():
     wf = create_twitch_workflow()
-    assert len(wf.steps) == 2
-    assert wf.steps[0].name == "twitch_registration"
-    assert wf.steps[1].name == "twitch_email_verification_skipped"
+    assert len(wf.steps) == 8
+    expected_names = [
+        "proxy_config", "browser_launch", "navigate_signup", "fill_form",
+        "captcha_solve", "submit_form", "store_credentials", "update_status",
+    ]
+    actual_names = [s.name for s in wf.steps]
+    assert actual_names == expected_names
 
 
 @pytest.mark.asyncio
 async def test_twitch_workflow_name():
     wf = create_twitch_workflow()
-    assert wf.name == "twitch_creation_only"
+    assert wf.name == "twitch_account_creation"
     assert wf.platform == "twitch"
+
+
+@pytest.mark.asyncio
+async def test_twitch_proxy_step_no_db():
+    from backend.app.workflows.twitch import ProxyConfigStep
+    step = ProxyConfigStep()
+    result = await step.execute({})
+    assert result.status == StepStatus.COMPLETED
+    assert result.data["proxy_configured"] is False
+
+
+@pytest.mark.asyncio
+async def test_twitch_browser_launch_fails_gracefully():
+    from backend.app.workflows.twitch import BrowserLaunchStep
+    step = BrowserLaunchStep()
+    result = await step.execute({})
+    assert result.status == StepStatus.FAILED
+    assert "launch" in result.message.lower() or "browser" in result.message.lower()

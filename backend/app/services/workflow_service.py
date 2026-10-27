@@ -216,5 +216,5 @@ class WorkflowService:
         m.status = execution.status
         m.current_step_index = execution.current_step_index
         m.step_results_json = json.dumps(execution.step_results)
-        m.context_json = json.dumps(execution.context)
+        m.context_json = json.dumps(execution.serializable_context())
         await self._session.commit()

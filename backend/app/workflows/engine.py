@@ -95,6 +95,9 @@ class WorkflowExecution:
             "updated_at": self.updated_at,
         }
 
+    def serializable_context(self) -> dict[str, Any]:
+        return {k: v for k, v in self.context.items() if not k.startswith("_")}
+
 
 class WorkflowEngine:
     """Executes workflow definitions step by step with error isolation."""

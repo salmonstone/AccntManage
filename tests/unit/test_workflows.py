@@ -37,8 +37,8 @@ async def test_create_twitch_workflow(client: AsyncClient):
     assert resp.status_code == 201
     data = resp.json()
     assert data["platform"] == "twitch"
-    assert data["workflow_name"] == "twitch_creation_only"
-    assert data["total_steps"] == 2
+    assert data["workflow_name"] == "twitch_account_creation"
+    assert data["total_steps"] == 8
 
 
 @pytest.mark.asyncio

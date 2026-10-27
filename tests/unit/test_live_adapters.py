@@ -100,21 +100,19 @@ def test_twitch_workflow_factory():
     from backend.app.workflows.twitch import create_twitch_workflow
 
     wf = create_twitch_workflow()
-    assert wf.name == "twitch_creation_only"
+    assert wf.name == "twitch_account_creation"
     assert wf.platform == "twitch"
-    assert len(wf.steps) == 2
-    assert wf.steps[1].required is False
+    assert len(wf.steps) == 8
 
 
 @pytest.mark.asyncio
-async def test_twitch_no_verification_step():
-    from backend.app.workflows.engine import StepStatus
-    from backend.app.workflows.twitch import TwitchNoVerificationStep
+async def test_twitch_no_email_verification_in_pipeline():
+    from backend.app.workflows.twitch import create_twitch_workflow
 
-    step = TwitchNoVerificationStep()
-    result = await step.execute({})
-    assert result.status == StepStatus.SKIPPED
-    assert "intentionally" in result.message.lower()
+    wf = create_twitch_workflow()
+    step_names = [s.name for s in wf.steps]
+    for name in step_names:
+        assert "email_verification" not in name
 
 
 @pytest.mark.asyncio

@@ -3,6 +3,17 @@ import { api } from '../api';
 import { useApi, useNotification, useWebSocket } from '../hooks';
 import { Loading, ErrorMessage, StatusBadge, EmptyState, Pagination, ConfirmDialog, Notification } from '../components';
 
+const PIPELINE_STEPS = [
+  { key: 'proxy_config', label: '1. Configure Proxy' },
+  { key: 'browser_launch', label: '2. Launch Browser' },
+  { key: 'navigate_signup', label: '3. Open Twitch Signup' },
+  { key: 'fill_form', label: '4. Fill Registration Form' },
+  { key: 'captcha_solve', label: '5. Solve CAPTCHA' },
+  { key: 'submit_form', label: '6. Submit Registration' },
+  { key: 'store_credentials', label: '7. Store Credentials' },
+  { key: 'update_status', label: '8. Update Account Status' },
+];
+
 export default function TwitchWorkflows() {
   const [page, setPage] = useState(1);
   const [showCreate, setShowCreate] = useState(false);
@@ -126,29 +137,61 @@ export default function TwitchWorkflows() {
 
       {selectedWf && (
         <div className="dialog-overlay" onClick={() => setSelectedWf(null)}>
-          <div className="dialog" onClick={e => e.stopPropagation()} style={{ maxWidth: 600 }}>
-            <h3>Workflow #{selectedWf.id}</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 13, marginBottom: 12 }}>
+          <div className="dialog" onClick={e => e.stopPropagation()} style={{ maxWidth: 680 }}>
+            <h3>Workflow #{selectedWf.id} — Pipeline</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 13, marginBottom: 16 }}>
               <div>Status: <StatusBadge status={selectedWf.status} /></div>
               <div>Account: #{selectedWf.account_id}</div>
-              <div>Step: {selectedWf.current_step_index + 1} / {selectedWf.total_steps}</div>
+              <div>Progress: {selectedWf.current_step_index + 1} / {selectedWf.total_steps}</div>
               <div>Job: #{selectedWf.job_id || 'N/A'}</div>
             </div>
-            {selectedWf.step_results?.map((s, i) => (
-              <div key={i} style={{
-                padding: '8px 0', borderBottom: '1px solid var(--border-color)',
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              }}>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: 14 }}>{s.step}</div>
-                  <div style={{ fontSize: 13, marginTop: 2 }}>{s.message}</div>
-                  {s.data?.no_email_verification && (
-                    <span style={{ fontSize: 11, color: '#ff9800', fontWeight: 600 }}>NO VERIFICATION (BY POLICY)</span>
-                  )}
-                </div>
-                <StatusBadge status={s.status} />
-              </div>
-            ))}
+
+            <div style={{ position: 'relative', paddingLeft: 28 }}>
+              {PIPELINE_STEPS.map((ps, i) => {
+                const result = selectedWf.step_results?.find(s => s.step === ps.key);
+                const isDone = !!result;
+                const isCurrent = !isDone && i === (selectedWf.step_results?.length || 0);
+                const isRunning = isCurrent && selectedWf.status === 'running';
+                const statusColor = result
+                  ? result.status === 'completed' ? '#22c55e'
+                    : result.status === 'failed' ? '#ef4444'
+                    : result.status === 'skipped' ? '#94a3b8'
+                    : result.status === 'manual_required' ? '#f59e0b'
+                    : '#6b7280'
+                  : isCurrent ? '#3b82f6' : '#374151';
+
+                return (
+                  <div key={ps.key} style={{ position: 'relative', paddingBottom: i < PIPELINE_STEPS.length - 1 ? 16 : 0 }}>
+                    {i < PIPELINE_STEPS.length - 1 && (
+                      <div style={{
+                        position: 'absolute', left: -20, top: 18, width: 2, height: 'calc(100%)',
+                        background: isDone ? '#22c55e' : 'var(--border-color)',
+                      }} />
+                    )}
+                    <div style={{ position: 'absolute', left: -28, top: 2, width: 16, height: 16, borderRadius: '50%', background: statusColor, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {isDone && result.status === 'completed' && <span style={{ color: '#fff', fontSize: 10, fontWeight: 700 }}>✓</span>}
+                      {isDone && result.status === 'failed' && <span style={{ color: '#fff', fontSize: 10, fontWeight: 700 }}>✗</span>}
+                      {isRunning && <span style={{ color: '#fff', fontSize: 10 }}>●</span>}
+                    </div>
+                    <div style={{ fontWeight: 600, fontSize: 13, color: isDone || isCurrent ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                      {ps.label}
+                    </div>
+                    {result && (
+                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+                        {result.message}
+                        {result.data?.no_email_verification && (
+                          <span style={{ display: 'block', fontSize: 11, color: '#f59e0b', fontWeight: 600, marginTop: 2 }}>NO EMAIL VERIFICATION (BY POLICY)</span>
+                        )}
+                      </div>
+                    )}
+                    {!result && isCurrent && isRunning && (
+                      <div style={{ fontSize: 12, color: '#3b82f6', marginTop: 2 }}>Running...</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
             <div className="dialog-actions" style={{ marginTop: 16 }}>
               <button className="btn" onClick={() => setSelectedWf(null)}>Close</button>
               {['created', 'paused_manual', 'failed'].includes(selectedWf.status) && (

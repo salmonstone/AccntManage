@@ -115,12 +115,33 @@ class WorkerService:
         execution = WorkflowExecution(defn, wf_resp.account_id)
         execution.context = json.loads(ctx_json)
 
+        execution.context["_db_session"] = session
+
+        if job_type == JobType.TWITCH_WORKFLOW:
+            from backend.app.core.config import settings
+            captcha_adapter = self._get_captcha_adapter(settings)
+            if captcha_adapter:
+                execution.context["_captcha_adapter"] = captcha_adapter
+
         engine = WorkflowEngine()
         execution = await engine.run(execution)
+
+        execution.context.pop("_db_session", None)
+        execution.context.pop("_captcha_adapter", None)
+        execution.context.pop("_browser_service", None)
+        execution.context.pop("_page", None)
+        execution.context.pop("_proxy_config", None)
 
         await wf_svc.update_from_execution(wf_id, execution)
 
         return execution.to_dict()
+
+    @staticmethod
+    def _get_captcha_adapter(settings):
+        if not settings.CAPSOLVER_API_KEY:
+            return None
+        from backend.app.adapters.capsolver import CapSolverAdapter
+        return CapSolverAdapter(settings.CAPSOLVER_API_KEY)
 
     async def _run_basic(self, job_type: JobType, params: dict) -> dict:
         if job_type == JobType.PROXY_TEST:
