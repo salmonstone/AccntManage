@@ -174,7 +174,15 @@ class WorkerSupervisor:
             else:
                 proxy_cfg = None
                 if settings.PROXY_URL:
-                    proxy_cfg = {"server": settings.PROXY_URL}
+                    from urllib.parse import urlparse
+                    parsed = urlparse(settings.PROXY_URL)
+                    proxy_cfg = {
+                        "server": f"{parsed.scheme}://{parsed.hostname}:{parsed.port}",
+                    }
+                    if parsed.username:
+                        proxy_cfg["username"] = parsed.username
+                    if parsed.password:
+                        proxy_cfg["password"] = parsed.password
 
                 browser_svc = BrowserService(BrowserConfig(
                     headless=settings.BROWSER_HEADLESS,

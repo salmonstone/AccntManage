@@ -18,7 +18,7 @@ SCREENSHOTS_DIR = Path("data/screenshots")
 CHROME_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/131.0.0.0 Safari/537.36"
+    "Chrome/136.0.0.0 Safari/537.36"
 )
 
 STEALTH_LAUNCH_ARGS = [
@@ -83,11 +83,19 @@ class BrowserService:
             self._browser = await self._playwright.chromium.launch(
                 channel="chrome", **launch_opts
             )
-            logger.info("Browser started with system Chrome (headless=%s)", self._config.headless)
+            logger.info("Browser started with system Chrome (headless=%s, proxy=%s)",
+                        self._config.headless, bool(self._config.proxy))
         except Exception:
-            logger.info("System Chrome not found, falling back to bundled Chromium")
-            self._browser = await self._playwright.chromium.launch(**launch_opts)
-            logger.info("Browser started with Chromium (headless=%s)", self._config.headless)
+            logger.warning("System Chrome not found, falling back to bundled Chromium — "
+                           "Twitch may detect this as unsupported")
+            try:
+                self._browser = await self._playwright.chromium.launch(
+                    channel="msedge", **launch_opts
+                )
+                logger.info("Browser started with Edge (headless=%s)", self._config.headless)
+            except Exception:
+                self._browser = await self._playwright.chromium.launch(**launch_opts)
+                logger.info("Browser started with bundled Chromium (headless=%s)", self._config.headless)
 
     async def new_page(self) -> Any:
         if not self._browser:
