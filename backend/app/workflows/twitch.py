@@ -196,7 +196,18 @@ class NavigateSignupStep(WorkflowStep):
             page = await browser_svc.new_page()
             context["_page"] = page
             await page.goto(TWITCH_SIGNUP_URL, wait_until="domcontentloaded", timeout=60000)
-            await asyncio.sleep(random.uniform(3.0, 5.0))
+            await asyncio.sleep(random.uniform(2.0, 3.0))
+            # Dismiss cookies banner if present
+            try:
+                proceed_btn = await page.query_selector(
+                    "button:has-text('Proceed'), button:has-text('Accept')"
+                )
+                if proceed_btn:
+                    await proceed_btn.click()
+                    await asyncio.sleep(random.uniform(0.5, 1.0))
+            except Exception:
+                pass
+            await asyncio.sleep(random.uniform(1.0, 2.0))
         except Exception as e:
             return StepResult(
                 StepStatus.FAILED,
@@ -238,6 +249,9 @@ class FillFormStep(WorkflowStep):
 
         context["generated_username"] = username
         context["generated_password"] = password
+        context["_dob_year"] = year
+        context["_dob_month"] = month
+        context["_dob_day"] = day
 
         if context.get("mock_mode"):
             return StepResult(
@@ -257,9 +271,10 @@ class FillFormStep(WorkflowStep):
                 "#email-input, input[name='email'], input[type='email']"
             )
             if email_input:
+                await email_input.click()
+                await asyncio.sleep(random.uniform(0.3, 0.6))
                 await email_input.fill("")
-                await asyncio.sleep(random.uniform(0.1, 0.3))
-                await email_input.fill(email)
+                await email_input.type(email, delay=random.uniform(30, 80))
                 await asyncio.sleep(random.uniform(0.5, 1.0))
 
             continue_btn = await page.query_selector(
@@ -276,18 +291,22 @@ class FillFormStep(WorkflowStep):
                 timeout=10000,
             )
             if username_input:
-                await username_input.fill(username)
-                await asyncio.sleep(random.uniform(0.3, 0.8))
+                await username_input.click()
+                await asyncio.sleep(random.uniform(0.2, 0.5))
+                await username_input.type(username, delay=random.uniform(40, 100))
+                await asyncio.sleep(random.uniform(0.5, 1.2))
 
             password_input = await page.query_selector(
                 "#password-input, input[name='password'], input[type='password']"
             )
             if password_input:
-                await password_input.fill(password)
-                await asyncio.sleep(random.uniform(0.3, 0.8))
+                await password_input.click()
+                await asyncio.sleep(random.uniform(0.2, 0.5))
+                await password_input.type(password, delay=random.uniform(30, 80))
+                await asyncio.sleep(random.uniform(0.5, 1.0))
 
             # --- DOB: use JavaScript to find all select elements and identify by option count ---
-            dob_result = await page.evaluate("""() => {
+            dob_result = await page.evaluate(r"""() => {
                 const selects = Array.from(document.querySelectorAll('select'));
                 const result = { month: null, day: null, year: null, debug: [] };
 
@@ -579,7 +598,27 @@ class SubmitFormStep(WorkflowStep):
         if not page:
             return StepResult(StepStatus.FAILED, "No page available")
 
+        username = context.get("generated_username", "")
+        password = context.get("generated_password", "")
+        email = context.get("email", "")
+        year, month, day = context.get("_dob_year", 2000), context.get("_dob_month", 1), context.get("_dob_day", 1)
+
         try:
+            # Extract client_id from page scripts
+            client_id = await page.evaluate(r"""() => {
+                // Try common Twitch client IDs embedded in the page
+                const scripts = document.querySelectorAll('script');
+                for (const s of scripts) {
+                    const text = s.textContent || '';
+                    const match = text.match(/clientId\s*[=:]\s*["']([a-z0-9]+)["']/i);
+                    if (match) return match[1];
+                }
+                // Fallback: Twitch's web client ID
+                return 'kimne78kx3ncx6brgo4mv6wki5h1ko';
+            }""")
+            logger.info("Using Twitch client_id: %s", client_id)
+
+            # First attempt: try clicking Sign Up button normally
             signup_btn = await page.query_selector(
                 "button[data-a-target='passport-signup-button'], "
                 "button[type='submit']:has-text('Sign Up'), "
@@ -588,93 +627,137 @@ class SubmitFormStep(WorkflowStep):
             if signup_btn:
                 await asyncio.sleep(random.uniform(0.5, 1.5))
                 await signup_btn.click()
-            else:
-                screenshot = None
-                if browser_svc:
-                    screenshot = await browser_svc.take_screenshot(page, "twitch_no_submit_btn")
-                return StepResult(
-                    StepStatus.FAILED,
-                    "Could not find signup submit button on page.",
-                    {"error": "submit_button_not_found"},
-                    screenshot,
-                )
+                await asyncio.sleep(random.uniform(3.0, 5.0))
 
-            # Wait for navigation or error — Twitch redirects on success
+            # Check for CAPTCHA after clicking
+            captcha_adapter = context.get("_captcha_adapter")
+            captcha_frame = await page.query_selector(
+                "iframe[src*='arkoselabs'], iframe[src*='funcaptcha'], "
+                "[class*='arkose'], [id*='arkose']"
+            )
+
+            arkose_token = None
+            if captcha_frame and captcha_adapter:
+                logger.info("CAPTCHA detected after clicking Sign Up — solving via CapSolver")
+                arkose_key = None
+                for frame in page.frames:
+                    url = frame.url
+                    if "arkoselabs" in url or "funcaptcha" in url:
+                        key_match = re.search(r"pk=([A-F0-9-]+)", url, re.IGNORECASE)
+                        if key_match:
+                            arkose_key = key_match.group(1)
+                            break
+
+                if arkose_key:
+                    solve_result = await captcha_adapter.solve(arkose_key, page.url)
+                    if solve_result.get("solved"):
+                        arkose_token = solve_result["token"]
+                        logger.info("CAPTCHA solved successfully")
+                    else:
+                        logger.warning("CAPTCHA solve failed: %s", solve_result.get("error"))
+                else:
+                    logger.warning("CAPTCHA iframe found but no Arkose key extracted")
+            elif captcha_adapter and not captcha_frame:
+                # No CAPTCHA appeared — try solving preemptively with known Twitch key
+                logger.info("No CAPTCHA iframe — attempting preemptive Arkose solve")
+                twitch_arkose_key = "E5554D43-23CC-1982-971D-6A2262A2CA24"
+                try:
+                    solve_result = await captcha_adapter.solve(twitch_arkose_key, page.url)
+                    if solve_result.get("solved"):
+                        arkose_token = solve_result["token"]
+                        logger.info("Preemptive CAPTCHA solved successfully")
+                except Exception as ce:
+                    logger.warning("Preemptive CAPTCHA solve failed: %s", ce)
+
+            # Submit registration via Twitch passport API using httpx through proxy
+            import json as _json
+            import httpx
+            birthday = {"day": day, "month": month, "year": year}
+            payload_obj = {
+                "username": username,
+                "password": password,
+                "email": email,
+                "birthday": birthday,
+                "client_id": client_id,
+                "include_verification_code": True,
+            }
+            if arkose_token:
+                payload_obj["arkose"] = {"token": arkose_token}
+
+            # Get cookies from the browser context
+            cookies = await page.context.cookies()
+            cookie_header = "; ".join(f"{c['name']}={c['value']}" for c in cookies)
+
+            # Get user-agent from the page
+            ua = await page.evaluate("() => navigator.userAgent")
+
+            from backend.app.core.config import settings
+            proxy_url = settings.PROXY_URL or None
+
+            headers = {
+                "Content-Type": "application/json",
+                "Client-Id": client_id,
+                "Cookie": cookie_header,
+                "Origin": "https://www.twitch.tv",
+                "Referer": "https://www.twitch.tv/",
+                "User-Agent": ua,
+                "Accept": "application/json",
+                "Accept-Language": "en-US,en;q=0.9",
+            }
+
             try:
-                await page.wait_for_url(
-                    lambda url: not url.startswith("https://www.twitch.tv/signup"),
-                    timeout=15000,
-                )
-                redirected = True
-            except Exception:
-                redirected = False
+                async with httpx.AsyncClient(
+                    proxy=proxy_url,
+                    timeout=30.0,
+                ) as client:
+                    resp = await client.post(
+                        "https://passport.twitch.tv/protected/register",
+                        json=payload_obj,
+                        headers=headers,
+                    )
+                api_result = {"status": resp.status_code, "data": resp.json() if resp.text else {}}
+            except Exception as req_err:
+                logger.warning("Direct API call failed: %s", req_err)
+                api_result = {"status": 0, "data": {}, "error": str(req_err)}
 
-            await asyncio.sleep(random.uniform(1.0, 2.0))
+            logger.info("Twitch API response: status=%s, data=%s",
+                        api_result.get("status"), str(api_result.get("data", ""))[:300])
+
             try:
                 screenshot = await browser_svc.take_screenshot(page, "twitch_after_submit")
-            except Exception as ss_err:
-                logger.warning("Post-submit screenshot failed (non-fatal): %s", ss_err)
+            except Exception:
                 screenshot = None
 
-            # Check for visible error messages
-            error_els = await page.query_selector_all(
-                "[data-a-target*='error'], [role='alert'], "
-                "[class*='error-text'], [class*='form-error'], "
-                "p[class*='error'], span[class*='error']"
-            )
-            error_texts = []
-            for el in error_els:
-                txt = (await el.inner_text()).strip()
-                if txt:
-                    error_texts.append(txt)
+            status = api_result.get("status", 0)
+            data = api_result.get("data", {})
 
-            if error_texts:
-                combined = "; ".join(error_texts)
+            if status == 200 and not data.get("error"):
+                context["registration_submitted"] = True
+                context["final_url"] = page.url
+                context["_twitch_user_id"] = data.get("userID")
                 return StepResult(
-                    StepStatus.FAILED,
-                    f"Registration error from Twitch: {combined}",
-                    {"error": combined, "final_url": page.url, "redirected": False},
+                    StepStatus.COMPLETED,
+                    f"Registration successful! userID={data.get('userID')}",
+                    {"submitted": True, "api_status": status, "user_id": data.get("userID")},
                     screenshot,
                 )
 
-            validation_text = await page.query_selector("text=Please select a valid")
-            if validation_text:
-                msg = (await validation_text.inner_text()).strip()
+            # Handle known error codes
+            error_code = data.get("error_code") or data.get("error") or ""
+            error_msg = data.get("error_description") or str(data)
+
+            if "arkose" in str(error_code).lower() or status == 403:
                 return StepResult(
                     StepStatus.FAILED,
-                    f"Form validation failed: {msg}",
-                    {"error": msg, "final_url": page.url, "redirected": False},
+                    f"CAPTCHA required but solve failed: {error_msg}",
+                    {"api_status": status, "error": error_msg, "needs_captcha": True},
                     screenshot,
                 )
 
-            # Grab page body text for diagnostics if still on signup
-            if not redirected:
-                body_text = await page.evaluate(
-                    "() => document.body ? document.body.innerText.slice(0, 2000) : ''"
-                )
-                logger.warning(
-                    "Registration did NOT redirect away from /signup. Page text: %s",
-                    body_text[:500],
-                )
-                return StepResult(
-                    StepStatus.FAILED,
-                    "Registration failed — Twitch did not redirect after submit. "
-                    "Likely silent rejection (fingerprint mismatch, missing proxy, or CAPTCHA).",
-                    {
-                        "final_url": page.url,
-                        "submitted": True,
-                        "redirected": False,
-                        "page_snippet": body_text[:500],
-                    },
-                    screenshot,
-                )
-
-            context["registration_submitted"] = True
-            context["final_url"] = page.url
             return StepResult(
-                StepStatus.COMPLETED,
-                "Registration submitted — Twitch redirected to post-signup page.",
-                {"final_url": page.url, "submitted": True, "redirected": True},
+                StepStatus.FAILED,
+                f"Registration rejected by Twitch API (HTTP {status}): {error_msg[:200]}",
+                {"api_status": status, "error": error_msg, "data": str(data)[:500]},
                 screenshot,
             )
 

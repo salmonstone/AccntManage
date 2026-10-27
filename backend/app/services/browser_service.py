@@ -18,22 +18,15 @@ SCREENSHOTS_DIR = Path("data/screenshots")
 CHROME_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/131.0.0.0 Safari/537.36"
+    "Chrome/136.0.0.0 Safari/537.36"
 )
 
 STEALTH_LAUNCH_ARGS = [
     "--disable-blink-features=AutomationControlled",
-    "--disable-features=IsolateOrigins,site-per-process",
     "--disable-infobars",
     "--no-first-run",
     "--no-default-browser-check",
-    "--disable-background-networking",
-    "--disable-component-update",
-    "--disable-default-apps",
-    "--disable-extensions",
-    "--disable-sync",
-    "--metrics-recording-only",
-    "--no-sandbox",
+    "--start-maximized",
 ]
 
 
@@ -98,74 +91,16 @@ class BrowserService:
                 "width": self._config.viewport_width,
                 "height": self._config.viewport_height,
             },
-            "user_agent": self._config.user_agent,
             "locale": self._config.locale,
             "timezone_id": self._config.timezone_id,
             "color_scheme": self._config.color_scheme,
-            "screen": {
-                "width": self._config.viewport_width,
-                "height": self._config.viewport_height,
-            },
-            "device_scale_factor": 1,
-            "is_mobile": False,
-            "has_touch": False,
-            "extra_http_headers": {
-                "Accept-Language": f"{self._config.locale},en;q=0.9",
-            },
         }
 
         context = await self._browser.new_context(**context_opts)
         context.set_default_timeout(self._config.timeout_ms)
 
-        lang = self._config.locale
-        lang_base = lang.split("-")[0]
-        await context.add_init_script(f"""
-            Object.defineProperty(navigator, 'webdriver', {{get: () => undefined}});
-            Object.defineProperty(navigator, 'languages', {{get: () => ['{lang}', '{lang_base}']}});
-            Object.defineProperty(navigator, 'platform', {{get: () => 'Win32'}});
-            Object.defineProperty(navigator, 'hardwareConcurrency', {{get: () => 8}});
-            Object.defineProperty(navigator, 'deviceMemory', {{get: () => 8}});
-            Object.defineProperty(navigator, 'maxTouchPoints', {{get: () => 0}});
-            Object.defineProperty(navigator, 'vendor', {{get: () => 'Google Inc.'}});
-
-            window.chrome = {{
-                runtime: {{id: undefined, connect: function(){{}}, sendMessage: function(){{}}}},
-                loadTimes: function(){{return {{}}}},
-                csi: function(){{return {{}}}},
-                app: {{isInstalled: false, InstallState: {{"DISABLED":"disabled","INSTALLED":"installed","NOT_INSTALLED":"not_installed"}}, RunningState: {{"CANNOT_RUN":"cannot_run","READY_TO_RUN":"ready_to_run","RUNNING":"running"}}}}
-            }};
-
-            const originalQuery = window.navigator.permissions.query;
-            window.navigator.permissions.query = (parameters) => (
-                parameters.name === 'notifications' ?
-                Promise.resolve({{state: Notification.permission}}) :
-                originalQuery(parameters)
-            );
-
-            // Spoof plugins to look like real Chrome
-            Object.defineProperty(navigator, 'plugins', {{get: () => {{
-                const plugins = [
-                    {{name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format'}},
-                    {{name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: ''}},
-                    {{name: 'Native Client', filename: 'internal-nacl-plugin', description: ''}}
-                ];
-                plugins.length = 3;
-                return plugins;
-            }}}});
-
-            // WebGL vendor/renderer spoofing
-            const getParameter = WebGLRenderingContext.prototype.getParameter;
-            WebGLRenderingContext.prototype.getParameter = function(param) {{
-                if (param === 37445) return 'Google Inc. (NVIDIA)';
-                if (param === 37446) return 'ANGLE (NVIDIA, NVIDIA GeForce GTX 1650 Direct3D11 vs_5_0 ps_5_0, D3D11)';
-                return getParameter.call(this, param);
-            }};
-            const getParameter2 = WebGL2RenderingContext.prototype.getParameter;
-            WebGL2RenderingContext.prototype.getParameter = function(param) {{
-                if (param === 37445) return 'Google Inc. (NVIDIA)';
-                if (param === 37446) return 'ANGLE (NVIDIA, NVIDIA GeForce GTX 1650 Direct3D11 vs_5_0 ps_5_0, D3D11)';
-                return getParameter2.call(this, param);
-            }};
+        await context.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
         """)
 
         page = await context.new_page()
