@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     SMS_PROVIDER_NAME: str = "generic"
 
     CAPTCHA_SOLVE_ENABLED: bool = False
+    MOCK_MODE: bool = False
 
     BROWSER_HEADLESS: bool = True
     BROWSER_TIMEOUT_MS: int = 30000

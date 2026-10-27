@@ -161,36 +161,47 @@ class WorkerSupervisor:
 
             from backend.app.services.browser_service import BrowserConfig, BrowserService
 
-            proxy_cfg = None
-            if settings.PROXY_URL:
-                proxy_cfg = {"server": settings.PROXY_URL}
+            if settings.MOCK_MODE:
+                from backend.app.adapters.mock_captcha import MockCaptchaAdapter
+                from backend.app.adapters.mock_mailbox import MockMailboxAdapter
+                from backend.app.adapters.mock_sms import MockSMSAdapter
 
-            browser_svc = BrowserService(BrowserConfig(
-                headless=settings.BROWSER_HEADLESS,
-                timeout_ms=settings.BROWSER_TIMEOUT_MS,
-                proxy=proxy_cfg,
-            ))
-
-            try:
-                await browser_svc.start()
-            except Exception as exc:
-                logger.warning("Browser unavailable, workflows will run without browser: %s", exc)
                 browser_svc = None
+                captcha_adapter = MockCaptchaAdapter()
+                mailbox_adapter = MockMailboxAdapter()
+                sms_adapter = MockSMSAdapter()
+                logger.info("Mock mode: using mock adapters for workflow %s", workflow_execution_id)
+            else:
+                proxy_cfg = None
+                if settings.PROXY_URL:
+                    proxy_cfg = {"server": settings.PROXY_URL}
 
-            captcha_adapter = None
-            if settings.CAPSOLVER_API_KEY and settings.CAPTCHA_SOLVE_ENABLED:
-                from backend.app.adapters.capsolver import CapSolverAdapter
-                captcha_adapter = CapSolverAdapter(api_key=settings.CAPSOLVER_API_KEY)
+                browser_svc = BrowserService(BrowserConfig(
+                    headless=settings.BROWSER_HEADLESS,
+                    timeout_ms=settings.BROWSER_TIMEOUT_MS,
+                    proxy=proxy_cfg,
+                ))
 
-            mailbox_adapter = None
-            sms_adapter = None
-            if settings.SMS_PROVIDER_API_KEY and settings.SMS_PROVIDER_BASE_URL:
-                from backend.app.adapters.live_sms import LiveSMSAdapter
-                sms_adapter = LiveSMSAdapter(
-                    api_key=settings.SMS_PROVIDER_API_KEY,
-                    base_url=settings.SMS_PROVIDER_BASE_URL,
-                    provider_name=settings.SMS_PROVIDER_NAME,
-                )
+                try:
+                    await browser_svc.start()
+                except Exception as exc:
+                    logger.warning("Browser unavailable, workflows will run without browser: %s", exc)
+                    browser_svc = None
+
+                captcha_adapter = None
+                if settings.CAPSOLVER_API_KEY and settings.CAPTCHA_SOLVE_ENABLED:
+                    from backend.app.adapters.capsolver import CapSolverAdapter
+                    captcha_adapter = CapSolverAdapter(api_key=settings.CAPSOLVER_API_KEY)
+
+                mailbox_adapter = None
+                sms_adapter = None
+                if settings.SMS_PROVIDER_API_KEY and settings.SMS_PROVIDER_BASE_URL:
+                    from backend.app.adapters.live_sms import LiveSMSAdapter
+                    sms_adapter = LiveSMSAdapter(
+                        api_key=settings.SMS_PROVIDER_API_KEY,
+                        base_url=settings.SMS_PROVIDER_BASE_URL,
+                        provider_name=settings.SMS_PROVIDER_NAME,
+                    )
 
             if wf_model.platform == "battlenet":
                 defn = create_battlenet_workflow(
@@ -211,6 +222,7 @@ class WorkerSupervisor:
                 return
 
             execution = EngineExecution(defn, wf_model.account_id)
+            execution.context["mock_mode"] = settings.MOCK_MODE
             if account:
                 execution.context["email"] = account.email
                 if account.display_name:

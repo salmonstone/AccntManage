@@ -55,6 +55,30 @@ class TwitchRegistrationStep(WorkflowStep):
         self._captcha = captcha_adapter
 
     async def execute(self, context: dict[str, Any]) -> StepResult:
+        email = context.get("email")
+        if not email:
+            return StepResult(StepStatus.FAILED, "No email in workflow context")
+
+        if context.get("mock_mode"):
+            username = _generate_username(email)
+            password = _generate_password()
+            context["generated_username"] = username
+            context["generated_password"] = password
+            context["no_email_verification"] = True
+            await asyncio.sleep(2)
+            return StepResult(
+                StepStatus.COMPLETED,
+                f"[MOCK] Twitch account signup simulated for {username}. "
+                "No real account was created.",
+                {
+                    "username": username,
+                    "email": email,
+                    "no_email_verification": True,
+                    "is_mock": True,
+                    "url": TWITCH_SIGNUP_URL,
+                },
+            )
+
         if not self._browser or not self._browser.is_running:
             return StepResult(
                 StepStatus.MANUAL_REQUIRED,
@@ -62,10 +86,6 @@ class TwitchRegistrationStep(WorkflowStep):
                 f"{TWITCH_SIGNUP_URL} and update the account record.",
                 {"url": TWITCH_SIGNUP_URL},
             )
-
-        email = context.get("email")
-        if not email:
-            return StepResult(StepStatus.FAILED, "No email in workflow context")
 
         username = _generate_username(email)
         password = _generate_password()
