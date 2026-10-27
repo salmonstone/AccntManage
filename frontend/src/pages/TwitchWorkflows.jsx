@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { api } from '../api';
 import { useApi, useNotification, useWebSocket } from '../hooks';
 import { Loading, ErrorMessage, StatusBadge, EmptyState, Pagination, ConfirmDialog, Notification } from '../components';
@@ -7,6 +7,7 @@ export default function TwitchWorkflows() {
   const [page, setPage] = useState(1);
   const [showCreate, setShowCreate] = useState(false);
   const [accountId, setAccountId] = useState('');
+  const [accounts, setAccounts] = useState([]);
   const [selectedWf, setSelectedWf] = useState(null);
   const [cancelId, setCancelId] = useState(null);
   const { notification, notify } = useNotification();
@@ -24,8 +25,16 @@ export default function TwitchWorkflows() {
   useWebSocket(onWsMessage
   );
 
+  useEffect(() => {
+    if (showCreate) {
+      api.accounts.list({ platform: 'twitch', page_size: 100 })
+        .then(res => setAccounts(res.items || []))
+        .catch(() => setAccounts([]));
+    }
+  }, [showCreate]);
+
   const handleCreate = async () => {
-    if (!accountId) return notify('Account ID required', 'error');
+    if (!accountId) return notify('Select an account', 'error');
     try {
       await api.workflows.create({ platform: 'twitch', account_id: parseInt(accountId) });
       notify('Twitch workflow created', 'success');
@@ -80,12 +89,18 @@ export default function TwitchWorkflows() {
           <div className="dialog" onClick={e => e.stopPropagation()}>
             <h3>Start Twitch Workflow</h3>
             <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-              Create or select an account first, then enter its ID.
+              Select a Twitch account to start the workflow.
               Email verification will be skipped per client policy.
             </p>
             <div className="form-group">
-              <label>Account ID</label>
-              <input type="number" value={accountId} onChange={e => setAccountId(e.target.value)} placeholder="Enter account ID" />
+              <label>Account</label>
+              <select value={accountId} onChange={e => setAccountId(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: 4, border: '1px solid var(--border-color)', background: 'var(--surface-color)', color: 'var(--text-color)' }}>
+                <option value="">-- Select account --</option>
+                {accounts.map(a => (
+                  <option key={a.id} value={a.id}>#{a.id} — {a.email} ({a.status})</option>
+                ))}
+              </select>
+              {accounts.length === 0 && <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>No Twitch accounts found. Import accounts first.</p>}
             </div>
             <div className="dialog-actions">
               <button className="btn" onClick={() => setShowCreate(false)}>Cancel</button>
