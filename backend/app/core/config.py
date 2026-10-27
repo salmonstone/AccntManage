@@ -44,6 +44,8 @@ class Settings(BaseSettings):
 
     BROWSER_HEADLESS: bool = True
     BROWSER_TIMEOUT_MS: int = 30000
+    BROWSER_LOCALE: str = "en-US"
+    BROWSER_TIMEZONE: str = "America/New_York"
     PROXY_URL: str = ""
 
     LOG_LEVEL: str = "INFO"

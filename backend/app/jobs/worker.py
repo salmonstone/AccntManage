@@ -180,6 +180,8 @@ class WorkerSupervisor:
                     headless=settings.BROWSER_HEADLESS,
                     timeout_ms=settings.BROWSER_TIMEOUT_MS,
                     proxy=proxy_cfg,
+                    locale=settings.BROWSER_LOCALE,
+                    timezone_id=settings.BROWSER_TIMEZONE,
                 ))
 
                 try:

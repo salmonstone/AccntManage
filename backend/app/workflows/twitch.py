@@ -152,6 +152,8 @@ class BrowserLaunchStep(WorkflowStep):
             headless=settings.BROWSER_HEADLESS,
             timeout_ms=settings.BROWSER_TIMEOUT_MS,
             proxy=proxy_config,
+            locale=settings.BROWSER_LOCALE,
+            timezone_id=settings.BROWSER_TIMEZONE,
         )
 
         browser_svc = BrowserService(config)
