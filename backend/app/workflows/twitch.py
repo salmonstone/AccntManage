@@ -138,10 +138,11 @@ class BrowserLaunchStep(WorkflowStep):
 
         browser_svc = context.get("_browser_service")
         if browser_svc and browser_svc.is_running:
+            diag = browser_svc.get_diagnostics()
             return StepResult(
                 StepStatus.COMPLETED,
                 "Browser already running (injected by worker).",
-                {"headless": True, "has_proxy": context.get("_proxy_config") is not None},
+                {"headless": diag.get("headless", True), "has_proxy": diag.get("has_proxy", False)},
             )
 
         from backend.app.services.browser_service import BrowserConfig, BrowserService
