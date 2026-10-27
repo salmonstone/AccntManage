@@ -153,17 +153,41 @@ class WorkerSupervisor:
                 await svc.mark_failed(job_id, f"Workflow execution {workflow_execution_id} not found")
                 return
 
+            from backend.app.services.browser_service import BrowserConfig, BrowserService
+
+            proxy_cfg = None
+            if settings.PROXY_URL:
+                proxy_cfg = {"server": settings.PROXY_URL}
+
+            browser_svc = BrowserService(BrowserConfig(
+                headless=settings.BROWSER_HEADLESS,
+                timeout_ms=settings.BROWSER_TIMEOUT_MS,
+                proxy=proxy_cfg,
+            ))
+
+            try:
+                await browser_svc.start()
+            except Exception as exc:
+                logger.warning("Browser unavailable, workflows will run without browser: %s", exc)
+                browser_svc = None
+
             if wf_model.platform == "battlenet":
-                defn = create_battlenet_workflow()
+                defn = create_battlenet_workflow(browser_service=browser_svc)
             elif wf_model.platform == "twitch":
-                defn = create_twitch_workflow()
+                defn = create_twitch_workflow(browser_service=browser_svc)
             else:
+                if browser_svc:
+                    await browser_svc.stop()
                 await svc.mark_failed(job_id, f"Unknown platform: {wf_model.platform}")
                 return
 
             execution = EngineExecution(defn, wf_model.account_id)
             engine = WorkflowEngine()
-            execution = await engine.run(execution)
+            try:
+                execution = await engine.run(execution)
+            finally:
+                if browser_svc:
+                    await browser_svc.stop()
 
             wf_svc = WorkflowService(session)
             await wf_svc.update_from_execution(workflow_execution_id, execution)

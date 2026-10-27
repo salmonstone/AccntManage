@@ -20,9 +20,11 @@ async def test_capsolver_not_configured():
 
 
 @pytest.mark.asyncio
-async def test_capsolver_solve_blocked_by_policy():
+async def test_capsolver_solve_blocked_by_policy(monkeypatch):
     from backend.app.adapters.capsolver import CapSolverAdapter
+    from backend.app.core import config
 
+    monkeypatch.setattr(config.settings, "CAPTCHA_SOLVE_ENABLED", False)
     adapter = CapSolverAdapter(api_key="")
     result = await adapter.solve("site-key", "https://example.com")
     assert result["solved"] is False

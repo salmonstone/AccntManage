@@ -50,6 +50,10 @@ class BrowserService:
         if self._config.proxy:
             launch_opts["proxy"] = self._config.proxy
 
+        executable = Path("/opt/pw-browsers/chromium-1243/chrome-linux64/chrome")
+        if executable.exists():
+            launch_opts["executable_path"] = str(executable)
+
         self._browser = await self._playwright.chromium.launch(**launch_opts)
         logger.info("Browser started (headless=%s)", self._config.headless)
 
