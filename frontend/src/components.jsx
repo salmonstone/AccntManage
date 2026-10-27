@@ -13,7 +13,8 @@ export function Pagination({ page, totalPages, onPageChange }) {
   );
 }
 
-export function ConfirmDialog({ title, message, onConfirm, onCancel }) {
+export function ConfirmDialog({ open, title, message, onConfirm, onCancel }) {
+  if (!open) return null;
   return (
     <div className="confirm-dialog-overlay" onClick={onCancel}>
       <div className="confirm-dialog" onClick={e => e.stopPropagation()}>
@@ -81,11 +82,12 @@ export function StatusBadge({ status }) {
   return <span className={`badge badge-${cls}`}>{label}</span>;
 }
 
-export function EmptyState({ icon = '📋', text = 'No data yet' }) {
+export function EmptyState({ icon = '📋', text, message }) {
+  const label = text || message || 'No data yet';
   return (
     <div className="empty-state">
       <div className="empty-state-icon">{icon}</div>
-      <div className="empty-state-text">{text}</div>
+      <div className="empty-state-text">{label}</div>
     </div>
   );
 }
