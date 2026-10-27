@@ -578,7 +578,6 @@ class SubmitFormStep(WorkflowStep):
             if signup_btn:
                 await asyncio.sleep(random.uniform(0.5, 1.5))
                 await signup_btn.click()
-                await asyncio.sleep(random.uniform(3.0, 5.0))
             else:
                 screenshot = None
                 if browser_svc:
@@ -590,8 +589,20 @@ class SubmitFormStep(WorkflowStep):
                     screenshot,
                 )
 
+            # Wait for navigation or error — Twitch redirects on success
+            try:
+                await page.wait_for_url(
+                    lambda url: not url.startswith("https://www.twitch.tv/signup"),
+                    timeout=15000,
+                )
+                redirected = True
+            except Exception:
+                redirected = False
+
+            await asyncio.sleep(random.uniform(1.0, 2.0))
             screenshot = await browser_svc.take_screenshot(page, "twitch_after_submit")
 
+            # Check for visible error messages
             error_els = await page.query_selector_all(
                 "[data-a-target*='error'], [role='alert'], "
                 "[class*='error-text'], [class*='form-error'], "
@@ -608,18 +619,39 @@ class SubmitFormStep(WorkflowStep):
                 return StepResult(
                     StepStatus.FAILED,
                     f"Registration error from Twitch: {combined}",
-                    {"error": combined, "final_url": page.url},
+                    {"error": combined, "final_url": page.url, "redirected": False},
                     screenshot,
                 )
 
-            still_on_signup = page.url.startswith("https://www.twitch.tv/signup")
             validation_text = await page.query_selector("text=Please select a valid")
             if validation_text:
                 msg = (await validation_text.inner_text()).strip()
                 return StepResult(
                     StepStatus.FAILED,
                     f"Form validation failed: {msg}",
-                    {"error": msg, "final_url": page.url},
+                    {"error": msg, "final_url": page.url, "redirected": False},
+                    screenshot,
+                )
+
+            # Grab page body text for diagnostics if still on signup
+            if not redirected:
+                body_text = await page.evaluate(
+                    "() => document.body ? document.body.innerText.slice(0, 2000) : ''"
+                )
+                logger.warning(
+                    "Registration did NOT redirect away from /signup. Page text: %s",
+                    body_text[:500],
+                )
+                return StepResult(
+                    StepStatus.FAILED,
+                    "Registration failed — Twitch did not redirect after submit. "
+                    "Likely silent rejection (fingerprint mismatch, missing proxy, or CAPTCHA).",
+                    {
+                        "final_url": page.url,
+                        "submitted": True,
+                        "redirected": False,
+                        "page_snippet": body_text[:500],
+                    },
                     screenshot,
                 )
 
@@ -627,8 +659,8 @@ class SubmitFormStep(WorkflowStep):
             context["final_url"] = page.url
             return StepResult(
                 StepStatus.COMPLETED,
-                "Registration form submitted successfully.",
-                {"final_url": page.url, "submitted": True, "redirected": not still_on_signup},
+                "Registration submitted — Twitch redirected to post-signup page.",
+                {"final_url": page.url, "submitted": True, "redirected": True},
                 screenshot,
             )
 
@@ -726,10 +758,16 @@ class UpdateStatusStep(WorkflowStep):
         if not account:
             return StepResult(StepStatus.FAILED, f"Account #{account_id} not found.")
 
-        if submitted:
+        final_url = context.get("final_url", "")
+        actually_redirected = submitted and not final_url.startswith("https://www.twitch.tv/signup")
+
+        if actually_redirected:
             account.status = AccountStatus.UNVERIFIED
             account.is_simulated = bool(context.get("mock_mode"))
             status_label = "unverified"
+        elif submitted:
+            account.status = AccountStatus.FAILED
+            status_label = "failed"
         else:
             account.status = AccountStatus.FAILED
             status_label = "failed"
