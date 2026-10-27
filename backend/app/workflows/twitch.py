@@ -95,30 +95,49 @@ class ProxyConfigStep(WorkflowStep):
         )
         proxy = result.scalar_one_or_none()
 
-        if not proxy:
-            context["_proxy_config"] = None
+        if proxy:
+            proxy_url = f"{proxy.protocol.value}://"
+            if proxy.username:
+                password = ""
+                if proxy.encrypted_password:
+                    try:
+                        password = decrypt_value(proxy.encrypted_password)
+                    except Exception:
+                        pass
+                proxy_url += f"{proxy.username}:{password}@"
+            proxy_url += f"{proxy.host}:{proxy.port}"
+
+            context["_proxy_config"] = {"server": proxy_url}
             return StepResult(
                 StepStatus.COMPLETED,
-                "No tested proxies available — using direct connection.",
-                {"proxy_configured": False},
+                f"Proxy configured: {proxy.host}:{proxy.port} ({proxy.protocol.value})",
+                {"proxy_configured": True, "proxy_host": proxy.host, "proxy_port": proxy.port},
             )
 
-        proxy_url = f"{proxy.protocol.value}://"
-        if proxy.username:
-            password = ""
-            if proxy.encrypted_password:
-                try:
-                    password = decrypt_value(proxy.encrypted_password)
-                except Exception:
-                    pass
-            proxy_url += f"{proxy.username}:{password}@"
-        proxy_url += f"{proxy.host}:{proxy.port}"
+        from backend.app.core.config import settings
+        if settings.PROXY_URL:
+            from urllib.parse import urlparse
+            parsed = urlparse(settings.PROXY_URL)
+            proxy_cfg = {
+                "server": f"{parsed.scheme}://{parsed.hostname}:{parsed.port}",
+            }
+            if parsed.username:
+                proxy_cfg["username"] = parsed.username
+            if parsed.password:
+                proxy_cfg["password"] = parsed.password
+            context["_proxy_config"] = proxy_cfg
+            return StepResult(
+                StepStatus.COMPLETED,
+                f"Proxy configured from PROXY_URL: {parsed.hostname}:{parsed.port}",
+                {"proxy_configured": True, "proxy_host": parsed.hostname, "proxy_port": parsed.port,
+                 "source": "env"},
+            )
 
-        context["_proxy_config"] = {"server": proxy_url}
+        context["_proxy_config"] = None
         return StepResult(
             StepStatus.COMPLETED,
-            f"Proxy configured: {proxy.host}:{proxy.port} ({proxy.protocol.value})",
-            {"proxy_configured": True, "proxy_host": proxy.host, "proxy_port": proxy.port},
+            "No tested proxies available — using direct connection.",
+            {"proxy_configured": False},
         )
 
 
