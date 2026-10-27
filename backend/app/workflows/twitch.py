@@ -514,6 +514,7 @@ class CaptchaSolveStep(WorkflowStep):
                 screenshot,
             )
 
+        # Extract Arkose public key from iframe URL or page scripts
         arkose_key = None
         for frame in page.frames:
             url = frame.url
@@ -524,17 +525,35 @@ class CaptchaSolveStep(WorkflowStep):
                     break
 
         if not arkose_key:
+            # Try extracting from page scripts / data attributes
+            arkose_key = await page.evaluate("""() => {
+                const scripts = document.querySelectorAll('script');
+                for (const s of scripts) {
+                    const m = s.textContent.match(/publicKey['":\\s]+['"]([A-F0-9-]+)['"]/i);
+                    if (m) return m[1];
+                }
+                const el = document.querySelector('[data-arkose-key], [data-public-key]');
+                if (el) return el.getAttribute('data-arkose-key') || el.getAttribute('data-public-key');
+                return null;
+            }""")
+
+        if not arkose_key:
+            logger.warning("CAPTCHA frame found but no Arkose public key detected")
             return StepResult(
                 StepStatus.COMPLETED,
                 "CAPTCHA frame found but no Arkose key detected — may not require solving.",
                 {"captcha_detected": True, "arkose_key_found": False},
             )
 
+        logger.info("Arkose public key found: %s", arkose_key)
         solve_result = await captcha_adapter.solve(arkose_key, page.url)
         if not solve_result.get("solved"):
             screenshot = None
             if browser_svc:
-                screenshot = await browser_svc.take_screenshot(page, "twitch_captcha_failed")
+                try:
+                    screenshot = await browser_svc.take_screenshot(page, "twitch_captcha_failed")
+                except Exception:
+                    pass
             return StepResult(
                 StepStatus.FAILED,
                 f"CAPTCHA solve failed: {solve_result.get('error', 'unknown')}",
@@ -543,19 +562,48 @@ class CaptchaSolveStep(WorkflowStep):
             )
 
         token = solve_result["token"]
-        await page.evaluate(f"""
-            var el = document.querySelector('[name="fc-token"], [id="fc-token"]');
-            if (el) el.value = '{token}';
-            if (window.ArkoseEnforcement) {{
-                window.ArkoseEnforcement.setConfig({{ data: {{ token: '{token}' }} }});
-            }}
-        """)
-        await asyncio.sleep(random.uniform(0.5, 1.0))
+        # Inject the solved token via multiple methods to cover Twitch's Arkose integration
+        await page.evaluate("""(token) => {
+            // Method 1: Set hidden input values
+            const inputs = document.querySelectorAll(
+                '[name="fc-token"], [id="fc-token"], [name="arkose_token"], ' +
+                'input[name*="captcha"], input[name*="arkose"]'
+            );
+            inputs.forEach(el => { el.value = token; });
+
+            // Method 2: Trigger Arkose enforcement callback
+            if (window.ArkoseEnforcement) {
+                try { window.ArkoseEnforcement.setConfig({ data: { token: token } }); } catch(e) {}
+            }
+
+            // Method 3: Call the Arkose callback directly if registered
+            if (typeof window.arkoseCallback === 'function') {
+                window.arkoseCallback({ token: token });
+            }
+
+            // Method 4: Dispatch on the enforcement object
+            const enforcements = document.querySelectorAll('[data-callback]');
+            enforcements.forEach(el => {
+                const cbName = el.getAttribute('data-callback');
+                if (cbName && typeof window[cbName] === 'function') {
+                    window[cbName]({ token: token });
+                }
+            });
+
+            // Method 5: Store token for form submission interception
+            window.__arkose_token = token;
+        }""", token)
+        await asyncio.sleep(random.uniform(1.0, 2.0))
+
+        # Store token in context so submit_form can use it in the API request
+        context["_arkose_token"] = token
+        logger.info("Arkose token injected into page and stored in context")
 
         return StepResult(
             StepStatus.COMPLETED,
-            "CAPTCHA solved successfully.",
-            {"captcha_detected": True, "captcha_solved": True, "provider": "capsolver"},
+            "CAPTCHA solved and token injected.",
+            {"captcha_detected": True, "captcha_solved": True, "provider": "capsolver",
+             "arkose_key": arkose_key},
         )
 
 

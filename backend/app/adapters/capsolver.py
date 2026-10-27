@@ -45,20 +45,29 @@ class CapSolverAdapter(CaptchaAdapter):
             raise ValueError("CapSolver API key not configured")
 
         try:
+            import asyncio
             async with httpx.AsyncClient(timeout=self._timeout) as client:
+                task_payload: dict[str, Any] = {
+                    "clientKey": self._api_key,
+                    "task": {
+                        "type": "FunCaptchaTaskProxyLess",
+                        "websiteURL": page_url,
+                        "websitePublicKey": site_key,
+                    },
+                }
+                logger.info("CapSolver createTask: type=FunCaptchaTaskProxyLess, key=%s..., url=%s",
+                            site_key[:12], page_url)
+
                 create_resp = await client.post(
                     f"{CAPSOLVER_API_URL}/createTask",
-                    json={
-                        "clientKey": self._api_key,
-                        "task": {
-                            "type": "ReCaptchaV2TaskProxyLess",
-                            "websiteURL": page_url,
-                            "websiteKey": site_key,
-                        },
-                    },
+                    json=task_payload,
                 )
-                create_resp.raise_for_status()
+
                 create_data = create_resp.json()
+                logger.info("CapSolver createTask response: status=%s, errorId=%s, errorDesc=%s",
+                            create_resp.status_code,
+                            create_data.get("errorId"),
+                            create_data.get("errorDescription"))
 
                 if create_data.get("errorId", 0) != 0:
                     return {
@@ -70,9 +79,8 @@ class CapSolverAdapter(CaptchaAdapter):
 
                 task_id = create_data.get("taskId")
 
-                import asyncio
-                for _ in range(30):
-                    await asyncio.sleep(4)
+                for attempt in range(45):
+                    await asyncio.sleep(3)
                     result_resp = await client.post(
                         f"{CAPSOLVER_API_URL}/getTaskResult",
                         json={"clientKey": self._api_key, "taskId": task_id},
@@ -81,9 +89,11 @@ class CapSolverAdapter(CaptchaAdapter):
 
                     if result_data.get("status") == "ready":
                         solution = result_data.get("solution", {})
+                        token = solution.get("token", "")
+                        logger.info("CapSolver solved FunCaptcha (task=%s, attempt=%d)", task_id, attempt + 1)
                         return {
                             "solved": True,
-                            "token": solution.get("gRecaptchaResponse", ""),
+                            "token": token,
                             "task_id": task_id,
                             "provider": "capsolver",
                             "is_mock": False,
@@ -99,7 +109,7 @@ class CapSolverAdapter(CaptchaAdapter):
 
                 return {
                     "solved": False,
-                    "error": "Solve timed out after 120s",
+                    "error": "Solve timed out after 135s",
                     "provider": "capsolver",
                     "is_mock": False,
                 }
@@ -107,6 +117,7 @@ class CapSolverAdapter(CaptchaAdapter):
         except httpx.TimeoutException:
             return {"solved": False, "error": "Request timed out", "provider": "capsolver", "is_mock": False}
         except Exception as e:
+            logger.exception("CapSolver unexpected error")
             return {"solved": False, "error": str(e), "provider": "capsolver", "is_mock": False}
 
     async def check_balance(self) -> dict[str, Any]:
