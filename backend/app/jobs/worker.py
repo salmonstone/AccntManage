@@ -153,6 +153,12 @@ class WorkerSupervisor:
                 await svc.mark_failed(job_id, f"Workflow execution {workflow_execution_id} not found")
                 return
 
+            from backend.app.models.account import Account
+            account_result = await session.execute(
+                select(Account).where(Account.id == wf_model.account_id)
+            )
+            account = account_result.scalar_one_or_none()
+
             from backend.app.services.browser_service import BrowserConfig, BrowserService
 
             proxy_cfg = None
@@ -171,10 +177,33 @@ class WorkerSupervisor:
                 logger.warning("Browser unavailable, workflows will run without browser: %s", exc)
                 browser_svc = None
 
+            captcha_adapter = None
+            if settings.CAPSOLVER_API_KEY and settings.CAPTCHA_SOLVE_ENABLED:
+                from backend.app.adapters.capsolver import CapSolverAdapter
+                captcha_adapter = CapSolverAdapter(api_key=settings.CAPSOLVER_API_KEY)
+
+            mailbox_adapter = None
+            sms_adapter = None
+            if settings.SMS_PROVIDER_API_KEY and settings.SMS_PROVIDER_BASE_URL:
+                from backend.app.adapters.live_sms import LiveSMSAdapter
+                sms_adapter = LiveSMSAdapter(
+                    api_key=settings.SMS_PROVIDER_API_KEY,
+                    base_url=settings.SMS_PROVIDER_BASE_URL,
+                    provider_name=settings.SMS_PROVIDER_NAME,
+                )
+
             if wf_model.platform == "battlenet":
-                defn = create_battlenet_workflow(browser_service=browser_svc)
+                defn = create_battlenet_workflow(
+                    browser_service=browser_svc,
+                    mailbox_adapter=mailbox_adapter,
+                    sms_adapter=sms_adapter,
+                    captcha_adapter=captcha_adapter,
+                )
             elif wf_model.platform == "twitch":
-                defn = create_twitch_workflow(browser_service=browser_svc)
+                defn = create_twitch_workflow(
+                    browser_service=browser_svc,
+                    captcha_adapter=captcha_adapter,
+                )
             else:
                 if browser_svc:
                     await browser_svc.stop()
@@ -182,6 +211,11 @@ class WorkerSupervisor:
                 return
 
             execution = EngineExecution(defn, wf_model.account_id)
+            if account:
+                execution.context["email"] = account.email
+                if account.display_name:
+                    execution.context["display_name"] = account.display_name
+
             engine = WorkflowEngine()
             try:
                 execution = await engine.run(execution)
@@ -189,8 +223,19 @@ class WorkerSupervisor:
                 if browser_svc:
                     await browser_svc.stop()
 
+            if account and execution.context.get("generated_username"):
+                account.display_name = execution.context["generated_username"]
+            if execution.status.value == "completed":
+                from backend.app.models.enums import AccountStatus
+                if account:
+                    if wf_model.platform == "twitch":
+                        account.status = AccountStatus.UNVERIFIED
+                    else:
+                        account.status = AccountStatus.VERIFIED_LIVE
+
             wf_svc = WorkflowService(session)
             await wf_svc.update_from_execution(workflow_execution_id, execution)
+            await session.commit()
 
             await svc.mark_completed(job_id, {
                 "workflow_status": execution.status.value,
