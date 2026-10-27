@@ -62,6 +62,14 @@ class ProxyConfigStep(WorkflowStep):
     description = "Configure proxy for browser session"
 
     async def execute(self, context: dict[str, Any]) -> StepResult:
+        if context.get("mock_mode"):
+            context["_proxy_config"] = None
+            return StepResult(
+                StepStatus.COMPLETED,
+                "[mock] Proxy config skipped — direct connection.",
+                {"proxy_configured": False, "mock": True},
+            )
+
         db_session = context.get("_db_session")
         if not db_session:
             return StepResult(
@@ -117,6 +125,21 @@ class BrowserLaunchStep(WorkflowStep):
     description = "Launch browser via Playwright"
 
     async def execute(self, context: dict[str, Any]) -> StepResult:
+        if context.get("mock_mode"):
+            return StepResult(
+                StepStatus.COMPLETED,
+                "[mock] Browser launch simulated.",
+                {"headless": True, "has_proxy": False, "mock": True},
+            )
+
+        browser_svc = context.get("_browser_service")
+        if browser_svc and browser_svc.is_running:
+            return StepResult(
+                StepStatus.COMPLETED,
+                "Browser already running (injected by worker).",
+                {"headless": True, "has_proxy": context.get("_proxy_config") is not None},
+            )
+
         from backend.app.services.browser_service import BrowserConfig, BrowserService
         from backend.app.core.config import settings
 
@@ -152,6 +175,13 @@ class NavigateSignupStep(WorkflowStep):
     description = "Open Twitch registration page"
 
     async def execute(self, context: dict[str, Any]) -> StepResult:
+        if context.get("mock_mode"):
+            return StepResult(
+                StepStatus.COMPLETED,
+                f"[mock] Navigated to {TWITCH_SIGNUP_URL}",
+                {"url": TWITCH_SIGNUP_URL, "mock": True},
+            )
+
         browser_svc = context.get("_browser_service")
         if not browser_svc or not browser_svc.is_running:
             return StepResult(StepStatus.FAILED, "Browser not running")
@@ -184,11 +214,6 @@ class FillFormStep(WorkflowStep):
     description = "Fill registration form (username, password, DOB)"
 
     async def execute(self, context: dict[str, Any]) -> StepResult:
-        page = context.get("_page")
-        browser_svc = context.get("_browser_service")
-        if not page:
-            return StepResult(StepStatus.FAILED, "No page available")
-
         email = context.get("email")
         if not email:
             return StepResult(StepStatus.FAILED, "No email in workflow context")
@@ -199,6 +224,18 @@ class FillFormStep(WorkflowStep):
 
         context["generated_username"] = username
         context["generated_password"] = password
+
+        if context.get("mock_mode"):
+            return StepResult(
+                StepStatus.COMPLETED,
+                f"[mock] Form filled — username: {username}, DOB: {year}-{month:02d}-{day:02d}",
+                {"username": username, "email": email, "dob": f"{year}-{month:02d}-{day:02d}", "mock": True},
+            )
+
+        page = context.get("_page")
+        browser_svc = context.get("_browser_service")
+        if not page:
+            return StepResult(StepStatus.FAILED, "No page available")
 
         try:
             username_input = await page.query_selector(
@@ -286,6 +323,13 @@ class CaptchaSolveStep(WorkflowStep):
     description = "Solve CAPTCHA via CapSolver"
 
     async def execute(self, context: dict[str, Any]) -> StepResult:
+        if context.get("mock_mode"):
+            return StepResult(
+                StepStatus.COMPLETED,
+                "[mock] CAPTCHA solve simulated.",
+                {"captcha_detected": True, "captcha_solved": True, "provider": "mock", "mock": True},
+            )
+
         page = context.get("_page")
         browser_svc = context.get("_browser_service")
         captcha_adapter = context.get("_captcha_adapter")
@@ -367,6 +411,15 @@ class SubmitFormStep(WorkflowStep):
     description = "Submit registration and inspect result"
 
     async def execute(self, context: dict[str, Any]) -> StepResult:
+        if context.get("mock_mode"):
+            context["registration_submitted"] = True
+            context["final_url"] = "https://www.twitch.tv/signup?mock=1"
+            return StepResult(
+                StepStatus.COMPLETED,
+                "[mock] Registration form submitted.",
+                {"final_url": context["final_url"], "submitted": True, "mock": True},
+            )
+
         page = context.get("_page")
         browser_svc = context.get("_browser_service")
         if not page:
@@ -468,12 +521,15 @@ class StoreCredentialsStep(WorkflowStep):
             account.display_name = username
         if password:
             account.credentials_enc = encrypt_value(password)
+        if context.get("mock_mode"):
+            account.is_simulated = True
 
         await db_session.commit()
+        mock = context.get("mock_mode", False)
         return StepResult(
             StepStatus.COMPLETED,
-            f"Credentials stored for account #{account_id} (username: {username}).",
-            {"stored_to_db": True, "account_id": account_id, "username": username},
+            f"{'[mock] ' if mock else ''}Credentials stored for account #{account_id} (username: {username}).",
+            {"stored_to_db": True, "account_id": account_id, "username": username, "mock": mock},
         )
 
 
@@ -509,7 +565,7 @@ class UpdateStatusStep(WorkflowStep):
 
         if submitted:
             account.status = AccountStatus.UNVERIFIED
-            account.is_simulated = False
+            account.is_simulated = bool(context.get("mock_mode"))
             status_label = "unverified"
         else:
             account.status = AccountStatus.FAILED

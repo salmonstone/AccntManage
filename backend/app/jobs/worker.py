@@ -223,6 +223,9 @@ class WorkerSupervisor:
 
             execution = EngineExecution(defn, wf_model.account_id)
             execution.context["mock_mode"] = settings.MOCK_MODE
+            execution.context["_db_session"] = session
+            execution.context["_browser_service"] = browser_svc
+            execution.context["_captcha_adapter"] = captcha_adapter
             if account:
                 execution.context["email"] = account.email
                 if account.display_name:
