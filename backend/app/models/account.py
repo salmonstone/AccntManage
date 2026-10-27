@@ -19,6 +19,7 @@ class Account(Base):
         Enum(AccountStatus), nullable=False, default=AccountStatus.DRAFT
     )
     display_name: Mapped[str | None] = mapped_column(String(255))
+    credentials_enc: Mapped[str | None] = mapped_column(Text)
     notes: Mapped[str | None] = mapped_column(Text)
     is_simulated: Mapped[bool] = mapped_column(default=False)
 

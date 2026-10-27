@@ -93,7 +93,7 @@ export default function Accounts() {
                 <thead>
                   <tr>
                     <th>Email</th><th>Platform</th><th>Status</th>
-                    <th>Name</th><th>Created</th><th>Actions</th>
+                    <th>Username</th><th>Password</th><th>Created</th><th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -103,6 +103,7 @@ export default function Accounts() {
                       <td><StatusBadge status={a.platform} /></td>
                       <td><StatusBadge status={a.status} /></td>
                       <td>{a.display_name || '-'}</td>
+                      <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{a.generated_password || '-'}</td>
                       <td>{new Date(a.created_at).toLocaleDateString()}</td>
                       <td>
                         <button className="btn" style={{ padding: '4px 8px', fontSize: 11 }}

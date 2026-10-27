@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from backend.app.models.enums import AccountPlatform, AccountStatus
 
@@ -36,10 +36,24 @@ class AccountResponse(BaseModel):
     email: str
     status: AccountStatus
     display_name: str | None
+    generated_password: str | None = None
     notes: str | None
     is_simulated: bool
     created_at: datetime
     updated_at: datetime
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def _decrypt_credentials(cls, data, handler):
+        obj = handler(data)
+        creds = getattr(data, "credentials_enc", None) if hasattr(data, "credentials_enc") else None
+        if creds:
+            try:
+                from backend.app.core.security import decrypt_value
+                obj.generated_password = decrypt_value(creds)
+            except Exception:
+                obj.generated_password = None
+        return obj
 
 
 class AccountStatusHistoryResponse(BaseModel):

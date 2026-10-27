@@ -237,6 +237,9 @@ class WorkerSupervisor:
 
             if account and execution.context.get("generated_username"):
                 account.display_name = execution.context["generated_username"]
+            if account and execution.context.get("generated_password"):
+                from backend.app.core.security import encrypt_value
+                account.credentials_enc = encrypt_value(execution.context["generated_password"])
             if execution.status.value == "completed":
                 from backend.app.models.enums import AccountStatus
                 if account:
