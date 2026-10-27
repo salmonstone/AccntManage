@@ -19,6 +19,33 @@ async def test_create_account(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_create_account_generates_credentials(client: AsyncClient):
+    resp = await client.post("/api/v1/accounts", json={
+        "platform": "battlenet",
+        "email": "creds@example.com",
+    })
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["display_name"] is not None and data["display_name"] != ""
+    assert "creds" in data["display_name"]
+    assert data["generated_password"] is not None
+    assert len(data["generated_password"]) >= 16
+
+
+@pytest.mark.asyncio
+async def test_create_account_custom_username(client: AsyncClient):
+    resp = await client.post("/api/v1/accounts", json={
+        "platform": "battlenet",
+        "email": "custom@example.com",
+        "display_name": "MyCustomName",
+    })
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["display_name"] == "MyCustomName"
+    assert data["generated_password"] is not None
+
+
+@pytest.mark.asyncio
 async def test_create_duplicate_account(client: AsyncClient):
     await client.post("/api/v1/accounts", json={
         "platform": "battlenet",

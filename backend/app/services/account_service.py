@@ -3,12 +3,15 @@ from __future__ import annotations
 import csv
 import io
 import logging
+import random
 import re
+import secrets
+import string
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.app.core.security import generate_correlation_id, mask_secret
+from backend.app.core.security import encrypt_value, generate_correlation_id, mask_secret
 from backend.app.models.account import Account, AccountStatusHistory
 from backend.app.models.enums import AccountPlatform, AccountStatus
 from backend.app.schemas.account import (
@@ -36,10 +39,14 @@ class AccountService:
         if existing.scalar_one_or_none():
             raise ValueError(f"Account already exists for {data.platform.value}: {mask_secret(data.email, 6)}")
 
+        username = data.display_name or self._generate_username(data.email)
+        password = self._generate_password()
+
         account = Account(
             platform=data.platform,
             email=data.email,
-            display_name=data.display_name,
+            display_name=username,
+            credentials_enc=encrypt_value(password),
             notes=data.notes,
             status=AccountStatus.DRAFT,
         )
@@ -244,6 +251,22 @@ class AccountService:
             if re.match(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$", part):
                 return part
         return None
+
+    @staticmethod
+    def _generate_username(email: str) -> str:
+        prefix = email.split("@")[0]
+        prefix = re.sub(r"[^a-zA-Z0-9]", "", prefix)[:12]
+        suffix = random.randint(100, 9999)
+        return f"{prefix}{suffix}"
+
+    @staticmethod
+    def _generate_password(length: int = 16) -> str:
+        alphabet = string.ascii_letters + string.digits + "!@#$%"
+        while True:
+            pw = "".join(secrets.choice(alphabet) for _ in range(length))
+            if (any(c.isupper() for c in pw) and any(c.islower() for c in pw)
+                    and any(c.isdigit() for c in pw) and any(c in "!@#$%" for c in pw)):
+                return pw
 
     @staticmethod
     def _csv_safe(value: str) -> str:
