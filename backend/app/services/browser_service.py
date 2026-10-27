@@ -73,6 +73,17 @@ class BrowserService:
         context = await self._browser.new_context(**context_opts)
         context.set_default_timeout(self._config.timeout_ms)
         page = await context.new_page()
+
+        try:
+            from playwright_stealth import Stealth
+            stealth = Stealth()
+            await stealth.apply_stealth_async(page)
+            logger.info("Stealth plugin applied to page")
+        except ImportError:
+            logger.warning("playwright-stealth not installed, skipping stealth")
+        except Exception as e:
+            logger.warning("Failed to apply stealth: %s", e)
+
         return page
 
     async def take_screenshot(self, page: Any, label: str = "screenshot") -> str:

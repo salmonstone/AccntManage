@@ -49,7 +49,11 @@ def _generate_password() -> str:
 
 
 def _random_dob() -> tuple[int, int, int]:
-    year = random.randint(1985, 2000)
+    from datetime import date
+    today = date.today()
+    min_year = today.year - 30
+    max_year = today.year - 18
+    year = random.randint(min_year, max_year)
     month = random.randint(1, 12)
     day = random.randint(1, 28)
     return year, month, day
@@ -189,8 +193,8 @@ class NavigateSignupStep(WorkflowStep):
         try:
             page = await browser_svc.new_page()
             context["_page"] = page
-            await page.goto(TWITCH_SIGNUP_URL, wait_until="networkidle")
-            await asyncio.sleep(random.uniform(1.0, 2.0))
+            await page.goto(TWITCH_SIGNUP_URL, wait_until="domcontentloaded", timeout=60000)
+            await asyncio.sleep(random.uniform(3.0, 5.0))
         except Exception as e:
             return StepResult(
                 StepStatus.FAILED,
@@ -218,7 +222,11 @@ class FillFormStep(WorkflowStep):
         if not email:
             return StepResult(StepStatus.FAILED, "No email in workflow context")
 
-        username = context.get("display_name") or _generate_username(email)
+        display = context.get("display_name") or ""
+        if len(display) >= 4:
+            username = display
+        else:
+            username = _generate_username(email)
         password = _generate_password()
         year, month, day = _random_dob()
 
@@ -238,8 +246,28 @@ class FillFormStep(WorkflowStep):
             return StepResult(StepStatus.FAILED, "No page available")
 
         try:
-            username_input = await page.query_selector(
-                "#signup-username, input[name='username'], input[autocomplete='username']"
+            # --- Page 1: email entry + Continue ---
+            email_input = await page.query_selector(
+                "#email-input, input[name='email'], input[type='email']"
+            )
+            if email_input:
+                await email_input.fill("")
+                await asyncio.sleep(random.uniform(0.1, 0.3))
+                await email_input.fill(email)
+                await asyncio.sleep(random.uniform(0.5, 1.0))
+
+            continue_btn = await page.query_selector(
+                "button[data-a-target='signup-continue-button'], "
+                "button:has-text('Continue')"
+            )
+            if continue_btn:
+                await continue_btn.click()
+                await asyncio.sleep(random.uniform(2.0, 3.0))
+
+            # --- Page 2: username, password, DOB ---
+            username_input = await page.wait_for_selector(
+                "input[name='username'], input[autocomplete='username'], #signup-username",
+                timeout=10000,
             )
             if username_input:
                 await username_input.fill(username)
@@ -252,47 +280,160 @@ class FillFormStep(WorkflowStep):
                 await password_input.fill(password)
                 await asyncio.sleep(random.uniform(0.3, 0.8))
 
-            password_confirm = await page.query_selector(
-                "input[name='passwordConfirm'], input[autocomplete='new-password']:nth-of-type(2)"
-            )
-            if password_confirm:
-                await password_confirm.fill(password)
-                await asyncio.sleep(random.uniform(0.3, 0.8))
+            # --- DOB: use JavaScript to find all select elements and identify by option count ---
+            dob_result = await page.evaluate("""() => {
+                const selects = Array.from(document.querySelectorAll('select'));
+                const result = { month: null, day: null, year: null, debug: [] };
 
-            month_select = await page.query_selector(
-                "select[data-a-target='birthday-month-select'], select[aria-label*='Month']"
-            )
-            if month_select:
-                await month_select.select_option(value=str(month))
-                await asyncio.sleep(random.uniform(0.2, 0.5))
+                function classifyField(sel) {
+                    const target = (sel.getAttribute('data-a-target') || '').toLowerCase();
+                    const label = (sel.getAttribute('aria-label') || '').toLowerCase();
+                    const id = (sel.id || '').toLowerCase();
+                    const name = (sel.name || '').toLowerCase();
+                    // Use last word of aria-label to avoid 'birthday' false matches
+                    const labelWords = label.split(/\s+/);
+                    const lastWord = labelWords[labelWords.length - 1] || '';
 
-            day_select = await page.query_selector(
-                "select[data-a-target='birthday-day-select'], select[aria-label*='Day']"
-            )
-            if day_select:
-                await day_select.select_option(value=str(day))
-                await asyncio.sleep(random.uniform(0.2, 0.5))
+                    if (target.includes('month') || lastWord === 'month' || id.includes('month') || name.includes('month')) return 'month';
+                    if (lastWord === 'year' || target.includes('year') || id.includes('year') || name.includes('year')) return 'year';
+                    if (lastWord === 'day' || target.includes('date') || target.includes('day') || id.includes('day') || name.includes('day')) return 'day';
+                    return null;
+                }
 
-            year_input = await page.query_selector(
-                "input[data-a-target='birthday-year-input'], input[aria-label*='Year'], input[placeholder*='Year']"
-            )
-            if year_input:
-                await year_input.fill(str(year))
-                await asyncio.sleep(random.uniform(0.2, 0.5))
+                for (let i = 0; i < selects.length; i++) {
+                    const sel = selects[i];
+                    result.debug.push({
+                        index: i,
+                        ariaLabel: sel.getAttribute('aria-label'),
+                        dataTarget: sel.getAttribute('data-a-target'),
+                        optionCount: sel.options.length,
+                    });
+                    const field = classifyField(sel);
+                    if (field && result[field] === null) result[field] = i;
+                }
 
-            email_phase_btn = await page.query_selector(
-                "button[data-a-target='signup-with-email-button'], button:has-text('Use email instead')"
-            )
-            if email_phase_btn:
-                await email_phase_btn.click()
-                await asyncio.sleep(random.uniform(0.5, 1.0))
+                // Fallback: positional after month
+                if (result.month !== null && (result.day === null || result.year === null)) {
+                    const after = selects.map((s, i) => i).filter(i => i > result.month && i !== result.month && i !== result.day && i !== result.year);
+                    if (result.day === null && after.length > 0) result.day = after[0];
+                    if (result.year === null && after.length > 1) result.year = after[1];
+                }
 
-            email_input = await page.query_selector(
-                "#email-input, input[name='email'], input[type='email']"
-            )
-            if email_input:
-                await email_input.fill(email)
-                await asyncio.sleep(random.uniform(0.3, 0.8))
+                // Fallback: option count heuristic
+                if (result.month === null || result.day === null || result.year === null) {
+                    for (let i = 0; i < selects.length; i++) {
+                        if (i === result.month || i === result.day || i === result.year) continue;
+                        const n = selects[i].options.length;
+                        if (result.month === null && n >= 12 && n <= 14) result.month = i;
+                        else if (result.day === null && n >= 28 && n <= 33) result.day = i;
+                        else if (result.year === null && n > 40) result.year = i;
+                    }
+                }
+
+                return result;
+            }""")
+
+            logger.info("DOB select discovery: month=%s, day=%s, year=%s, debug=%s",
+                        dob_result.get("month"), dob_result.get("day"), dob_result.get("year"),
+                        dob_result.get("debug"))
+
+            month_idx = dob_result.get("month")
+            day_idx = dob_result.get("day")
+            year_idx = dob_result.get("year")
+
+            if month_idx is not None:
+                await page.evaluate(
+                    """(args) => {
+                        const selects = document.querySelectorAll('select');
+                        const sel = selects[args.idx];
+                        if (!sel) return;
+                        // Try setting by value first, then by index
+                        const val = String(args.value);
+                        for (let i = 0; i < sel.options.length; i++) {
+                            if (sel.options[i].value === val) {
+                                sel.selectedIndex = i;
+                                sel.dispatchEvent(new Event('change', {bubbles: true}));
+                                sel.dispatchEvent(new Event('input', {bubbles: true}));
+                                return;
+                            }
+                        }
+                        // Fallback: match by text content
+                        for (let i = 0; i < sel.options.length; i++) {
+                            if (sel.options[i].textContent.trim() === val) {
+                                sel.selectedIndex = i;
+                                sel.dispatchEvent(new Event('change', {bubbles: true}));
+                                sel.dispatchEvent(new Event('input', {bubbles: true}));
+                                return;
+                            }
+                        }
+                    }""",
+                    {"idx": month_idx, "value": month},
+                )
+                await asyncio.sleep(random.uniform(0.3, 0.6))
+
+            if day_idx is not None:
+                await page.evaluate(
+                    """(args) => {
+                        const selects = document.querySelectorAll('select');
+                        const sel = selects[args.idx];
+                        if (!sel) return;
+                        const val = String(args.value);
+                        for (let i = 0; i < sel.options.length; i++) {
+                            if (sel.options[i].value === val) {
+                                sel.selectedIndex = i;
+                                sel.dispatchEvent(new Event('change', {bubbles: true}));
+                                sel.dispatchEvent(new Event('input', {bubbles: true}));
+                                return;
+                            }
+                        }
+                        for (let i = 0; i < sel.options.length; i++) {
+                            if (sel.options[i].textContent.trim() === val) {
+                                sel.selectedIndex = i;
+                                sel.dispatchEvent(new Event('change', {bubbles: true}));
+                                sel.dispatchEvent(new Event('input', {bubbles: true}));
+                                return;
+                            }
+                        }
+                    }""",
+                    {"idx": day_idx, "value": day},
+                )
+                await asyncio.sleep(random.uniform(0.3, 0.6))
+
+            if year_idx is not None:
+                await page.evaluate(
+                    """(args) => {
+                        const selects = document.querySelectorAll('select');
+                        const sel = selects[args.idx];
+                        if (!sel) return;
+                        const val = String(args.value);
+                        for (let i = 0; i < sel.options.length; i++) {
+                            if (sel.options[i].value === val) {
+                                sel.selectedIndex = i;
+                                sel.dispatchEvent(new Event('change', {bubbles: true}));
+                                sel.dispatchEvent(new Event('input', {bubbles: true}));
+                                return;
+                            }
+                        }
+                        for (let i = 0; i < sel.options.length; i++) {
+                            if (sel.options[i].textContent.trim() === val) {
+                                sel.selectedIndex = i;
+                                sel.dispatchEvent(new Event('change', {bubbles: true}));
+                                sel.dispatchEvent(new Event('input', {bubbles: true}));
+                                return;
+                            }
+                        }
+                    }""",
+                    {"idx": year_idx, "value": year},
+                )
+                await asyncio.sleep(random.uniform(0.3, 0.6))
+
+            dob_filled = (month_idx is not None and day_idx is not None and year_idx is not None)
+            if not dob_filled:
+                missing = []
+                if month_idx is None: missing.append("month")
+                if day_idx is None: missing.append("day")
+                if year_idx is None: missing.append("year")
+                logger.warning("DOB fields not found: %s", ", ".join(missing))
 
         except Exception as e:
             screenshot = None
@@ -311,7 +452,8 @@ class FillFormStep(WorkflowStep):
         return StepResult(
             StepStatus.COMPLETED,
             f"Form filled — username: {username}, DOB: {year}-{month:02d}-{day:02d}",
-            {"username": username, "email": email, "dob": f"{year}-{month:02d}-{day:02d}"},
+            {"username": username, "email": email, "dob": f"{year}-{month:02d}-{day:02d}",
+             "dob_filled": dob_filled},
             screenshot,
         )
 
@@ -448,15 +590,34 @@ class SubmitFormStep(WorkflowStep):
 
             screenshot = await browser_svc.take_screenshot(page, "twitch_after_submit")
 
-            error_el = await page.query_selector(
-                "[class*='error'], [data-a-target*='error'], [role='alert']"
+            error_els = await page.query_selector_all(
+                "[data-a-target*='error'], [role='alert'], "
+                "[class*='error-text'], [class*='form-error'], "
+                "p[class*='error'], span[class*='error']"
             )
-            if error_el:
-                error_text = await error_el.inner_text()
+            error_texts = []
+            for el in error_els:
+                txt = (await el.inner_text()).strip()
+                if txt:
+                    error_texts.append(txt)
+
+            if error_texts:
+                combined = "; ".join(error_texts)
                 return StepResult(
                     StepStatus.FAILED,
-                    f"Registration error from Twitch: {error_text}",
-                    {"error": error_text, "final_url": page.url},
+                    f"Registration error from Twitch: {combined}",
+                    {"error": combined, "final_url": page.url},
+                    screenshot,
+                )
+
+            still_on_signup = page.url.startswith("https://www.twitch.tv/signup")
+            validation_text = await page.query_selector("text=Please select a valid")
+            if validation_text:
+                msg = (await validation_text.inner_text()).strip()
+                return StepResult(
+                    StepStatus.FAILED,
+                    f"Form validation failed: {msg}",
+                    {"error": msg, "final_url": page.url},
                     screenshot,
                 )
 
@@ -465,7 +626,7 @@ class SubmitFormStep(WorkflowStep):
             return StepResult(
                 StepStatus.COMPLETED,
                 "Registration form submitted successfully.",
-                {"final_url": page.url, "submitted": True},
+                {"final_url": page.url, "submitted": True, "redirected": not still_on_signup},
                 screenshot,
             )
 
