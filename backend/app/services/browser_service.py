@@ -117,20 +117,55 @@ class BrowserService:
         context = await self._browser.new_context(**context_opts)
         context.set_default_timeout(self._config.timeout_ms)
 
-        await context.add_init_script("""
-            Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-            Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
-            Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
-            Object.defineProperty(navigator, 'platform', {get: () => 'Win32'});
-            Object.defineProperty(navigator, 'hardwareConcurrency', {get: () => 8});
-            Object.defineProperty(navigator, 'deviceMemory', {get: () => 8});
-            window.chrome = {runtime: {}, loadTimes: function(){}, csi: function(){}};
+        lang = self._config.locale
+        lang_base = lang.split("-")[0]
+        await context.add_init_script(f"""
+            Object.defineProperty(navigator, 'webdriver', {{get: () => undefined}});
+            Object.defineProperty(navigator, 'languages', {{get: () => ['{lang}', '{lang_base}']}});
+            Object.defineProperty(navigator, 'platform', {{get: () => 'Win32'}});
+            Object.defineProperty(navigator, 'hardwareConcurrency', {{get: () => 8}});
+            Object.defineProperty(navigator, 'deviceMemory', {{get: () => 8}});
+            Object.defineProperty(navigator, 'maxTouchPoints', {{get: () => 0}});
+            Object.defineProperty(navigator, 'vendor', {{get: () => 'Google Inc.'}});
+
+            window.chrome = {{
+                runtime: {{id: undefined, connect: function(){{}}, sendMessage: function(){{}}}},
+                loadTimes: function(){{return {{}}}},
+                csi: function(){{return {{}}}},
+                app: {{isInstalled: false, InstallState: {{"DISABLED":"disabled","INSTALLED":"installed","NOT_INSTALLED":"not_installed"}}, RunningState: {{"CANNOT_RUN":"cannot_run","READY_TO_RUN":"ready_to_run","RUNNING":"running"}}}}
+            }};
+
             const originalQuery = window.navigator.permissions.query;
             window.navigator.permissions.query = (parameters) => (
                 parameters.name === 'notifications' ?
-                Promise.resolve({state: Notification.permission}) :
+                Promise.resolve({{state: Notification.permission}}) :
                 originalQuery(parameters)
             );
+
+            // Spoof plugins to look like real Chrome
+            Object.defineProperty(navigator, 'plugins', {{get: () => {{
+                const plugins = [
+                    {{name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format'}},
+                    {{name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: ''}},
+                    {{name: 'Native Client', filename: 'internal-nacl-plugin', description: ''}}
+                ];
+                plugins.length = 3;
+                return plugins;
+            }}}});
+
+            // WebGL vendor/renderer spoofing
+            const getParameter = WebGLRenderingContext.prototype.getParameter;
+            WebGLRenderingContext.prototype.getParameter = function(param) {{
+                if (param === 37445) return 'Google Inc. (NVIDIA)';
+                if (param === 37446) return 'ANGLE (NVIDIA, NVIDIA GeForce GTX 1650 Direct3D11 vs_5_0 ps_5_0, D3D11)';
+                return getParameter.call(this, param);
+            }};
+            const getParameter2 = WebGL2RenderingContext.prototype.getParameter;
+            WebGL2RenderingContext.prototype.getParameter = function(param) {{
+                if (param === 37445) return 'Google Inc. (NVIDIA)';
+                if (param === 37446) return 'ANGLE (NVIDIA, NVIDIA GeForce GTX 1650 Direct3D11 vs_5_0 ps_5_0, D3D11)';
+                return getParameter2.call(this, param);
+            }};
         """)
 
         page = await context.new_page()
