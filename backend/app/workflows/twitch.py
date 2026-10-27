@@ -204,7 +204,11 @@ class NavigateSignupStep(WorkflowStep):
                 {"url": TWITCH_SIGNUP_URL, "error": str(e)},
             )
 
-        screenshot = await browser_svc.take_screenshot(page, "twitch_signup_loaded")
+        try:
+            screenshot = await browser_svc.take_screenshot(page, "twitch_signup_loaded")
+        except Exception as ss_err:
+            logger.warning("Screenshot failed (non-fatal): %s", ss_err)
+            screenshot = None
         return StepResult(
             StepStatus.COMPLETED,
             f"Twitch signup page loaded: {TWITCH_SIGNUP_URL}",
@@ -440,7 +444,10 @@ class FillFormStep(WorkflowStep):
         except Exception as e:
             screenshot = None
             if browser_svc:
-                screenshot = await browser_svc.take_screenshot(page, "twitch_form_error")
+                try:
+                    screenshot = await browser_svc.take_screenshot(page, "twitch_form_error")
+                except Exception:
+                    pass
             return StepResult(
                 StepStatus.FAILED,
                 f"Error filling form: {e}",
@@ -450,7 +457,10 @@ class FillFormStep(WorkflowStep):
 
         screenshot = None
         if browser_svc:
-            screenshot = await browser_svc.take_screenshot(page, "twitch_form_filled")
+            try:
+                screenshot = await browser_svc.take_screenshot(page, "twitch_form_filled")
+            except Exception as ss_err:
+                logger.warning("Screenshot failed (non-fatal): %s", ss_err)
         return StepResult(
             StepStatus.COMPLETED,
             f"Form filled — username: {username}, DOB: {year}-{month:02d}-{day:02d}",
@@ -600,7 +610,11 @@ class SubmitFormStep(WorkflowStep):
                 redirected = False
 
             await asyncio.sleep(random.uniform(1.0, 2.0))
-            screenshot = await browser_svc.take_screenshot(page, "twitch_after_submit")
+            try:
+                screenshot = await browser_svc.take_screenshot(page, "twitch_after_submit")
+            except Exception as ss_err:
+                logger.warning("Post-submit screenshot failed (non-fatal): %s", ss_err)
+                screenshot = None
 
             # Check for visible error messages
             error_els = await page.query_selector_all(
